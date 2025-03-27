@@ -1,0 +1,128 @@
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// User model for authentication and profile
+model User {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  email         String    @unique
+  username      String    @unique
+  passwordHash  String
+  firstName     String?
+  lastName      String?
+  avatar        String?
+  bio           String?
+  role          UserRole  @default(MEMBER)
+  expertise     String[]  // Areas of cybersecurity expertise
+  
+  // Relationships
+  posts         Post[]
+  comments      Comment[]
+  discussions   Discussion[]
+  
+  // Metadata
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Enum for user roles
+enum UserRole {
+  MEMBER
+  MODERATOR
+  ADMIN
+  RESEARCHER
+}
+
+// Forum Topics/Categories
+model Topic {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String
+  color         String?   // For UI color coding
+  
+  // Relationships
+  posts         Post[]
+  
+  createdAt     DateTime  @default(now())
+}
+
+// Main post/discussion model
+model Post {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  title         String
+  content       String
+  
+  // Relationships
+  author        User      @relation(fields: [authorId], references: [id])
+  authorId      String    @db.ObjectId
+  topic         Topic     @relation(fields: [topicId], references: [id])
+  topicId       String    @db.ObjectId
+  
+  // Metadata
+  tags          String[]
+  views         Int       @default(0)
+  upvotes       Int       @default(0)
+  downvotes     Int       @default(0)
+  
+  // Child relationships
+  comments      Comment[]
+  discussions   Discussion[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Comment model for posts
+model Comment {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  content       String
+  
+  // Relationships
+  author        User      @relation(fields: [authorId], references: [id])
+  authorId      String    @db.ObjectId
+  post          Post      @relation(fields: [postId], references: [id])
+  postId        String    @db.ObjectId
+  
+  // Optional parent comment for nested comments
+  parentComment Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  parentId      String?   @db.ObjectId
+  replies       Comment[] @relation("CommentReplies")
+  
+  // Metadata
+  upvotes       Int       @default(0)
+  downvotes     Int       @default(0)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Discussion tracking model (for tracking specific conversations)
+model Discussion {
+  id            String    @id @default(auto()) @map("_id") @db.ObjectId
+  
+  // Relationships
+  post          Post      @relation(fields: [postId], references: [id])
+  postId        String    @db.ObjectId
+  initiator     User      @relation(fields: [initiatorId], references: [id])
+  initiatorId   String    @db.ObjectId
+  
+  // Discussion specific fields
+  status        DiscussionStatus @default(OPEN)
+  researchRelevance Int?  // Optional field for research significance
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Enum for discussion status
+enum DiscussionStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
