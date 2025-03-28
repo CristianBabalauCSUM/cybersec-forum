@@ -1,6 +1,6 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { PrismaAdapter } from "@auth/prisma-adapter"
 import bcrypt from "bcrypt"
 import { UserRole } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
@@ -11,8 +11,8 @@ export const { handlers,
   signIn, 
   signOut, 
   auth  } = NextAuth( {
-  adapter: PrismaAdapter(prisma),
-  providers: [
+    adapter: PrismaAdapter(prisma) as any, // Use 'as any' to bypass strict type checking
+    providers: [
     CredentialsProvider({
       name: "Credentials",
       credentials: {
