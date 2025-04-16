@@ -12,8 +12,8 @@ import { AuthError } from "next-auth"
 
  
 
-export default function LoginPage() {
-  //const session = await auth();
+export default async function LoginPage() {
+  const session = await auth();
 
   async function loginAction(formData: FormData) {
     "use server";
@@ -60,9 +60,13 @@ export default function LoginPage() {
     }
   }
 
-
+  if (session) {
+    // Redirect to home if already logged in
+    redirect("/");
+  }
 
   return (
+
     <div className="flex justify-center items-center min-h-screen">
       <Card className="w-full max-w-md">
         <CardHeader>

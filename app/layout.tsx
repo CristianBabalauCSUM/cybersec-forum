@@ -5,6 +5,7 @@ import { SessionProvider } from "next-auth/react"
 import { auth } from "@/auth"
 import Navbar from "./components/Navbar"
 import type React from "react"
+import { ClientSessionProvider } from "@/components/ClientSessionProvider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -20,6 +21,7 @@ export default async function RootLayout({
 }) {
 
   return (
+
     <html lang="en">
       <body className={inter.className}>
           <Navbar />

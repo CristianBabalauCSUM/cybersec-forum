@@ -8,7 +8,7 @@ const discussions = [
   {
     id: 1,
     title: "Latest zero-day exploit in popular CMS",
-    author: "Alice",
+    author: "Admin Anon",
     avatar: "/avatars/alice.jpg",
     replies: 23,
     views: 1200,

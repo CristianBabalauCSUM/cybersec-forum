@@ -7,10 +7,12 @@ import { prisma } from "@/lib/prisma"
 
 // No need to redefine types since they're already in next-auth.d.ts
 
-export const { handlers, 
+export const { 
+  handlers, 
   signIn, 
   signOut, 
-  auth  } = NextAuth( {
+  auth  
+  } = NextAuth( {
     adapter: PrismaAdapter(prisma) as any, // Use 'as any' to bypass strict type checking
     providers: [
     CredentialsProvider({

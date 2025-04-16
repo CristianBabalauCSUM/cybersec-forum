@@ -35,6 +35,11 @@ AUTH_SECRET="UnB97SMGRfemDXJoWr7NT8lMWf7MuXGq186bCCJm4zM="
 ```bash
 npx prisma generate
 npx prisma db push
+
+! Only used to resed the database, do not used it without consulting !
+npx prisma db push --force-reset
+
+
 ```
 
 ### 5. Run Development Server
@@ -68,11 +73,3 @@ The application will be available at `http://localhost:3000`
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
-## License
-[Your License Here]
-```
-
-## Additional Notes
-- Replace `<your-repository-url>` with the actual repository URL
-- Add your specific license information
-- Customize the README according to your project's specific requirements

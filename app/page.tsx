@@ -16,6 +16,7 @@ export default function Home() {
             <TabsTrigger value="hot">Hot</TabsTrigger>
             <TabsTrigger value="solved">Solved</TabsTrigger>
             <TabsTrigger value="unanswered">Unanswered</TabsTrigger>
+            <TabsTrigger value="sql">SQL</TabsTrigger>
           </TabsList>
           <TabsContent value="latest">
             <RecentDiscussions />
@@ -28,6 +29,9 @@ export default function Home() {
           </TabsContent>
           <TabsContent value="unanswered">
             <RecentDiscussions filter="unanswered" />
+          </TabsContent>
+          <TabsContent value="sql">
+            <RecentDiscussions filter="sql" />
           </TabsContent>
         </Tabs>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
