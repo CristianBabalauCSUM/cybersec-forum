@@ -1,23 +1,24 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Eye, ArrowBigUp, ArrowBigDown } from "lucide-react"
 import Link from "next/link"
+import { formatDistance } from "date-fns"
+import { PostWithAuthor } from "@/types/prisma"
 
-const TopicView = ({ featured = false }) => {
-  const topic = {
-    id: 1,
-    title: "Critical vulnerability found in widely-used encryption library",
-    author: "SecurityExpert",
-    avatar: "/avatars/security-expert.jpg",
-    content:
-      "A critical vulnerability has been discovered in a widely-used encryption library that could potentially compromise the security of millions of devices. This flaw allows attackers to bypass encryption...",
-    replies: 78,
-    views: 5600,
-    votes: 234,
-    tags: ["vulnerability", "encryption", "security-alert"],
-  }
+interface TopicViewProps {
+  post: PostWithAuthor;
+  featured?: boolean;
+}
 
+const TopicView = ({ post, featured = false }: TopicViewProps) => {
+  // Function to strip HTML tags from content
+  const stripHtml = (html: string) => {
+    return html.replace(/<[^>]*>/g, '');
+  };
+
+  // Get a preview of the content
+  const contentPreview = stripHtml(post.content).substring(0, featured ? 180 : 120);
+  
   return (
     <div className="space-y-4">
       <div className="flex items-start space-x-4">
@@ -25,41 +26,44 @@ const TopicView = ({ featured = false }) => {
           <Button variant="ghost" size="sm">
             <ArrowBigUp className="h-5 w-5" />
           </Button>
-          <span className="font-bold">{topic.votes}</span>
+          <span className="font-bold">{post.upvotes - post.downvotes}</span>
           <Button variant="ghost" size="sm">
             <ArrowBigDown className="h-5 w-5" />
           </Button>
         </div>
         <div className="flex-grow">
-          <Link href={`/topic/${topic.id}`}>
-            <h3 className="font-bold text-xl mb-2">{topic.title}</h3>
+          <Link href={`/topics/${post.topic.slug}/${post.id}`}>
+            <h3 className="font-bold text-xl mb-2 hover:text-blue-600 transition">{post.title}</h3>
           </Link>
           <div className="flex items-center text-sm text-gray-500 mb-2">
             <Avatar className="h-6 w-6 mr-2">
-              <AvatarImage src={topic.avatar} alt={topic.author} />
-              <AvatarFallback>{topic.author[0]}</AvatarFallback>
+              {post.author.avatar ? (
+                <AvatarImage src={post.author.avatar} alt={post.author.username} />
+              ) : (
+                <AvatarFallback>{post.author.username[0].toUpperCase()}</AvatarFallback>
+              )}
             </Avatar>
-            <span>{topic.author}</span>
+            <span>{post.author.username}</span>
+            <span className="mx-2">•</span>
+            <span>{formatDistance(new Date(post.createdAt), new Date(), { addSuffix: true })}</span>
             <span className="mx-2">•</span>
             <MessageSquare className="h-4 w-4 mr-1" />
-            <span>{topic.replies}</span>
+            <span>{post._count.comments}</span>
             <span className="mx-2">•</span>
             <Eye className="h-4 w-4 mr-1" />
-            <span>{topic.views}</span>
+            <span>{post.views}</span>
           </div>
-          <p className="text-gray-700 mb-4">{topic.content}</p>
-          <div className="flex flex-wrap gap-2">
-            {topic.tags.map((tag) => (
-              <Badge key={tag} variant="secondary">
-                {tag}
-              </Badge>
-            ))}
-          </div>
+          <p className="text-gray-700 mb-4">
+            {contentPreview}
+            {post.content.length > (featured ? 180 : 120) ? '...' : ''}
+          </p>
         </div>
       </div>
       {featured && (
         <div className="flex justify-end">
-          <Button>Read More</Button>
+          <Link href={`/topics/${post.topic.slug}/${post.id}`}>
+            <Button>Read More</Button>
+          </Link>
         </div>
       )}
     </div>
@@ -67,4 +71,3 @@ const TopicView = ({ featured = false }) => {
 }
 
 export default TopicView
-

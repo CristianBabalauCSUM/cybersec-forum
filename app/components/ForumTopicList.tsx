@@ -1,39 +1,56 @@
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { MessageSquare, Users } from "lucide-react"
+import { TopicWithPostCounts } from "@/types/prisma"
 
-const topics = [
-  { id: 1, name: "Network Security", posts: 1234, users: 567, color: "bg-red-500" },
-  { id: 2, name: "Malware Analysis", posts: 987, users: 432, color: "bg-blue-500" },
-  { id: 3, name: "Cryptography", posts: 756, users: 321, color: "bg-green-500" },
-  { id: 4, name: "Web Security", posts: 543, users: 234, color: "bg-yellow-500" },
-  { id: 5, name: "Mobile Security", posts: 321, users: 123, color: "bg-purple-500" },
-]
+// Array of colors for topic badges
+const colors = [
+  "bg-red-500",
+  "bg-blue-500",
+  "bg-green-500",
+  "bg-yellow-500",
+  "bg-purple-500",
+  "bg-pink-500",
+  "bg-indigo-500",
+  "bg-teal-500"
+];
 
-const ForumTopicList = () => {
+interface ForumTopicListProps {
+  topics: TopicWithPostCounts[];
+}
+
+const ForumTopicList = ({ topics }: ForumTopicListProps) => {
+  // Function to count unique users in a topic
+  const countUniqueUsers = (posts: { author: { id: string } }[]) => {
+    const uniqueUserIds = new Set(posts.map(post => post.author.id));
+    return uniqueUserIds.size;
+  };
+
   return (
     <ul className="space-y-4">
-      {topics.map((topic) => (
+      {topics.map((topic, index) => (
         <li key={topic.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
-          <Link href={`/topic/${topic.id}`} className="flex items-center space-x-2">
-            <Badge className={`${topic.color} w-3 h-3 rounded-full`} />
+          <Link href={`/topics/${topic.slug}`} className="flex items-center space-x-2">
+            <Badge className={`${colors[index % colors.length]} w-3 h-3 rounded-full`} />
             <span className="font-medium">{topic.name}</span>
           </Link>
           <div className="flex items-center space-x-4 text-sm text-gray-500">
             <div className="flex items-center">
               <MessageSquare className="h-4 w-4 mr-1" />
-              <span>{topic.posts} posts</span>
+              <span>{topic._count.posts} posts</span>
             </div>
             <div className="flex items-center">
               <Users className="h-4 w-4 mr-1" />
-              <span>{topic.users} users</span>
+              <span>{countUniqueUsers(topic.posts)} users</span>
             </div>
           </div>
         </li>
       ))}
+      {topics.length === 0 && (
+        <li className="p-4 text-center text-gray-500">No topics available.</li>
+      )}
     </ul>
   )
 }
 
 export default ForumTopicList
-

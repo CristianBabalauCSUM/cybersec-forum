@@ -165,7 +165,7 @@ export default async function TopicsPage() {
         </Link>
       </div>
 
-      {/* Filter and Sort options */}
+      {/* Filter and Sort options 
       <div className="flex space-x-2">
         <Button variant="outline" size="sm">
           <Filter className="h-4 w-4 mr-1" />
@@ -176,11 +176,10 @@ export default async function TopicsPage() {
           Sort
         </Button>
       </div>
-
+      */}
       {/* Tabs for different views */}
-      <Tabs defaultValue="all">
+      <Tabs defaultValue="recent">
         <TabsList>
-          <TabsTrigger value="all">All Topics</TabsTrigger>
           <TabsTrigger value="recent">
             <Clock className="h-4 w-4 mr-1 inline" />
             Recent
@@ -192,12 +191,12 @@ export default async function TopicsPage() {
           <TabsTrigger value="new">New Topics</TabsTrigger>
         </TabsList>
         
-        {/* All Topics Tab */}
+        {/* All Topics Tab 
         <TabsContent value="all" className="space-y-6 mt-6">
           {categories.map((category) => (
             <TopicCategory key={category.id} category={category} />
           ))}
-        </TabsContent>
+        </TabsContent>*/}
         
         {/* Recent Topics Tab */}
         <TabsContent value="recent" className="space-y-6 mt-6">
