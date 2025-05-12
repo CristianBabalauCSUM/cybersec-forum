@@ -6,6 +6,12 @@ import { auth } from "@/auth"
 import Navbar from "./components/Navbar"
 import type React from "react"
 import { ClientSessionProvider } from "@/components/ClientSessionProvider"
+import {
+  FpjsProvider,
+  FingerprintJSPro
+} from '@fingerprintjs/fingerprintjs-pro-react'
+import Providers from './providers'
+
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -25,7 +31,9 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
           <Navbar />
-          <main className="container mx-auto px-4 py-8">{children}</main>
+          <Providers> 
+            <main className="container mx-auto px-4 py-8">{children}</main>
+          </Providers>
       </body>
     </html>
   )

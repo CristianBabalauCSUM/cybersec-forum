@@ -73,3 +73,9 @@ The application will be available at `http://localhost:3000`
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
 
+
+
+## Git Double Repository Dependency 
+git remote -v 
+git push origin main
+git push personal main
