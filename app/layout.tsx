@@ -13,6 +13,7 @@ import {
 import Providers from './providers'
 import TrackingScore from "./components/TrackingScore"
 import {MouseTrackerProvider, MouseTrackerDebug} from "./components/MouseTrackerProvider"
+import { KeystrokeProvider, KeystrokeDebug } from "@/app/components/KeystrokeTrackerProvider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -32,10 +33,15 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
           <Navbar />
-          
+
           <MouseTrackerProvider>
             <Providers> 
-              <main className="container mx-auto px-4 py-8">{children}</main>
+                      <KeystrokeProvider >
+                                                <main className="container mx-auto px-4 py-8">{children}</main>
+
+                        <KeystrokeDebug /> 
+
+                      </KeystrokeProvider>
               <MouseTrackerDebug />
             </Providers> 
           </MouseTrackerProvider>

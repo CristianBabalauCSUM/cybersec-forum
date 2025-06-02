@@ -58,7 +58,7 @@ const CONFIG = {
   minPointsForCombined: 10,
   minClicksForCombined: 3,
   scoreUpdateInterval: 2000,
-  maxDataPoints: 1000,
+  maxDataPoints: 2000, // Increased for better analysis
   enableDebug: true,
 
   
@@ -116,7 +116,7 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Debug logging
   const log = useCallback((...args: any[]) => {
-    if (CONFIG.enableDebug) {
+    if (!CONFIG.enableDebug) {
       console.log('[MouseTracker]', ...args);
     }
   }, []);
@@ -173,6 +173,7 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
           severity
         });
       }
+
     }
     
     // Calculate score based on proportion of suspicious movements

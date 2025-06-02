@@ -1,6 +1,6 @@
 // app/layout.tsx
 import "@/styles/globals.css"
-import { KeystrokeProvider } from '@/app/components/KeystrokeTrackerProvider';
+import { KeystrokeProvider, KeystrokeDebug } from '@/app/components/KeystrokeTrackerProvider';
 
 import type React from "react"
 import { DeviceFingerprintProvider } from "@/app/components/DeviceFingerprintProvider";
@@ -14,9 +14,13 @@ export default function NoLayoutForLaboratory({ children }: { children: React.Re
   return (
     <>
       <DeviceFingerprintProvider>
-        <KeystrokeProvider apiEndpoint="http://157.180.39.110:5000/receive-json">
+
+        <KeystrokeProvider >
           {children}
+          <KeystrokeDebug /> 
+
         </KeystrokeProvider>
+
       </DeviceFingerprintProvider>
 
     </>
