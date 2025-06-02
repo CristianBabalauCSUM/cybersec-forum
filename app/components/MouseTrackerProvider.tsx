@@ -140,7 +140,7 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const timeDelta = currentPoint.timestamp - prevPoint.timestamp;
       
       // Skip if time delta is too large (user might have paused)
-      if (timeDelta > 1000) continue;
+      if (timeDelta > 10000) continue;
       
       let severity: TeleportationEvent['severity'] | null = null;
       
