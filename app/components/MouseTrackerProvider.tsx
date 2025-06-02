@@ -371,14 +371,15 @@ export const MouseTrackerDebug: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '20px',
-      left: '20px',
+      bottom: '10px',
+      left: '10px',
       background: 'rgba(0, 0, 0, 0.8)',
       color: 'white',
       padding: '10px',
       borderRadius: '5px',
       fontSize: '12px',
       zIndex: 9999,
+      pointerEvents: 'none',
       fontFamily: 'monospace'
     }}>
       <div>Bot Score: {tracker.botScore}%</div>
