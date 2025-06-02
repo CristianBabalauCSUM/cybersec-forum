@@ -3,7 +3,7 @@ import "@/styles/globals.css"
 import { KeystrokeProvider, KeystrokeDebug } from '@/app/components/KeystrokeTrackerProvider';
 
 import type React from "react"
-import { DeviceFingerprintProvider } from "@/app/components/DeviceFingerprintProvider";
+import { DeviceFingerprintProvider, DeviceFingerprintDebug } from "@/app/components/DeviceFingerprintProvider";
 
 export const metadata = {
   title: 'Laboratory',
@@ -14,10 +14,9 @@ export default function NoLayoutForLaboratory({ children }: { children: React.Re
   return (
     <>
       <DeviceFingerprintProvider>
-
           {children}
 
-
+          <DeviceFingerprintDebug />
       </DeviceFingerprintProvider>
 
     </>

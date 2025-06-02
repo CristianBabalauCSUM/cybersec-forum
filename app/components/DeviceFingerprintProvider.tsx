@@ -547,7 +547,7 @@ export const DeviceFingerprintProvider: React.FC<{
     return Math.max(...precisions);
   };
 
-  // Enhanced privacy and security detection
+// Enhanced privacy and security detection
   const getPrivacyInfo = (): PrivacyInfo => {
     return {
       adBlockDetected: detectAdBlock(),
@@ -616,7 +616,7 @@ export const DeviceFingerprintProvider: React.FC<{
       }
 
       // Method 3: Safari-specific test
-      if ('safariIncognito' in window) {
+      if ('safariIncognito' in window && (window as any).safariIncognito) {
         return true;
       }
 
@@ -859,5 +859,206 @@ export const DeviceFingerprintProvider: React.FC<{
     <DeviceFingerprintContext.Provider value={contextValue}>
       {children}
     </DeviceFingerprintContext.Provider>
+  );
+};
+
+// Debug component for device fingerprint
+export const DeviceFingerprintDebug: React.FC = () => {
+  const { generateFingerprint, getStoredFingerprint } = useDeviceFingerprint();
+  const [fingerprint, setFingerprint] = React.useState<DeviceFingerprint | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const [lastUpdate, setLastUpdate] = React.useState<number>(0);
+
+  // Auto-generate fingerprint on mount and periodically
+  React.useEffect(() => {
+    const generateFP = async () => {
+      setIsLoading(true);
+      try {
+        const fp = await generateFingerprint();
+        setFingerprint(fp);
+        setLastUpdate(Date.now());
+      } catch (error) {
+        console.error('Failed to generate fingerprint:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Generate immediately
+    generateFP();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(generateFP, 30000);
+
+    return () => clearInterval(interval);
+  }, [generateFingerprint]);
+
+  if (!fingerprint && !isLoading) return null;
+
+  // Calculate trust score (inverse of risk score)
+  const trustScore = fingerprint ? Math.max(0, 100 - fingerprint.riskScore) : 0;
+
+  // Get status color based on trust score
+  const getStatusColor = (score: number) => {
+    if (score >= 80) return '#22c55e'; // Green
+    if (score >= 60) return '#eab308'; // Yellow
+    if (score >= 40) return '#f97316'; // Orange
+    return '#ef4444'; // Red
+  };
+
+  const statusColor = getStatusColor(trustScore);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '200px',
+      left: '10px',
+      background: 'rgba(0, 0, 0, 0.9)',
+      color: 'white',
+      padding: '12px',
+      borderRadius: '8px',
+      fontSize: '11px',
+      zIndex: 9999,
+      pointerEvents: 'none',
+      fontFamily: 'monospace',
+      minWidth: '200px',
+      maxWidth: '280px',
+      backdropFilter: 'blur(10px)'
+    }}>
+      {/* Header */}
+      <div style={{ 
+        fontWeight: 'bold', 
+        marginBottom: '8px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      }}>
+        <span>Device Fingerprint</span>
+        {isLoading && (
+          <span style={{ color: '#60a5fa', fontSize: '10px' }}>⚡</span>
+        )}
+      </div>
+
+      {fingerprint ? (
+        <>
+          {/* Trust Score */}
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center',
+              marginBottom: '4px'
+            }}>
+              <span>Trust Score:</span>
+              <span style={{ 
+                color: statusColor,
+                fontWeight: 'bold'
+              }}>
+                {trustScore}%
+              </span>
+            </div>
+            
+            {/* Trust Score Bar */}
+            <div style={{
+              width: '100%',
+              height: '4px',
+              background: '#333',
+              borderRadius: '2px',
+              overflow: 'hidden'
+            }}>
+              <div style={{
+                width: `${trustScore}%`,
+                height: '100%',
+                background: statusColor,
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+          </div>
+
+          {/* Device Info */}
+          <div style={{ fontSize: '10px', opacity: 0.9, marginBottom: '8px' }}>
+            <div>Device ID: {fingerprint.hash.substring(0, 8)}...</div>
+            <div>Platform: {fingerprint.basic.platform}</div>
+            <div>Browser: {fingerprint.basic.vendor}</div>
+            <div>Screen: {fingerprint.screen.screenWidth}×{fingerprint.screen.screenHeight}</div>
+            <div>Fonts: {fingerprint.fonts.fontCount}</div>
+            <div>WebGL: {fingerprint.graphics.webglExtensions.length} ext</div>
+          </div>
+
+          {/* Hardware Stats */}
+          <div style={{ fontSize: '10px', borderTop: '1px solid #444', paddingTop: '6px', marginBottom: '6px' }}>
+            <div>CPU Cores: {fingerprint.basic.hardwareConcurrency}</div>
+            <div>Memory: {fingerprint.basic.deviceMemory ? `${fingerprint.basic.deviceMemory}GB` : 'Unknown'}</div>
+            <div>Touch Points: {fingerprint.basic.maxTouchPoints}</div>
+            <div>Languages: {fingerprint.basic.languages.length}</div>
+            <div>Timezone: {fingerprint.timezone.timezone.split('/').pop()}</div>
+          </div>
+
+          {/* Risk Factors */}
+          {fingerprint.riskFactors.length > 0 && (
+            <div style={{ 
+              fontSize: '9px', 
+              borderTop: '1px solid #444', 
+              paddingTop: '6px',
+              marginBottom: '6px'
+            }}>
+              <div style={{ color: '#ff6b6b', fontWeight: 'bold', marginBottom: '3px' }}>
+                🚨 Risk Factors ({fingerprint.riskFactors.length}):
+              </div>
+              <div style={{ maxHeight: '60px', overflowY: 'auto' }}>
+                {fingerprint.riskFactors.slice(0, 3).map((factor, index) => (
+                  <div key={index} style={{ marginBottom: '1px' }}>
+                    • {factor}
+                  </div>
+                ))}
+                {fingerprint.riskFactors.length > 3 && (
+                  <div style={{ color: '#888' }}>
+                    ...and {fingerprint.riskFactors.length - 3} more
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Privacy & Security */}
+          <div style={{ fontSize: '9px', borderTop: '1px solid #444', paddingTop: '6px', marginBottom: '6px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>Privacy Status:</div>
+            <div>Ad Block: {fingerprint.privacy.adBlockDetected ? '✅' : '❌'}</div>
+            <div>Private Mode: {fingerprint.privacy.privateBrowsing ? '✅' : '❌'}</div>
+            <div>Audio: {fingerprint.audio.contextState}</div>
+            <div>Online: {fingerprint.network.online ? '✅' : '❌'}</div>
+          </div>
+
+          {/* Performance Metrics */}
+          <div style={{ fontSize: '9px', borderTop: '1px solid #444', paddingTop: '6px', marginBottom: '6px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>Performance:</div>
+            <div>Timer Precision: {fingerprint.performance.performanceNowPrecision}ms</div>
+            {fingerprint.performance.memoryUsed && (
+              <div>Memory Used: {Math.round(fingerprint.performance.memoryUsed / 1024 / 1024)}MB</div>
+            )}
+            {fingerprint.sensors.batteryLevel && (
+              <div>Battery: {fingerprint.sensors.batteryLevel}%</div>
+            )}
+          </div>
+
+          {/* Graphics Info */}
+          <div style={{ fontSize: '9px', borderTop: '1px solid #444', paddingTop: '6px', marginBottom: '6px' }}>
+            <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>Graphics:</div>
+            <div>Vendor: {fingerprint.graphics.webglVendor.substring(0, 20)}...</div>
+            <div>Renderer: {fingerprint.graphics.webglRenderer.substring(0, 20)}...</div>
+            <div>Formats: {fingerprint.graphics.supportedFormats.join(', ')}</div>
+          </div>
+
+          
+        </>
+      ) : (
+        <div style={{ textAlign: 'center', padding: '20px 0' }}>
+          <div style={{ marginBottom: '8px' }}>🔄 Generating fingerprint...</div>
+          <div style={{ fontSize: '9px', opacity: 0.7 }}>
+            Analyzing device characteristics
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
