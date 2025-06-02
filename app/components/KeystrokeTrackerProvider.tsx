@@ -6,6 +6,7 @@ import React, { createContext, useContext, useCallback, useRef, useState } from 
 const MAX_MS = 1500;
 const GAP_MS = 1000;
 const CONTEXT_K = 5;
+const NGRAM_LIMIT = 50; // keep only the last 50 timings per n-gram
 
 // Types
 interface KeystrokeData {
@@ -40,12 +41,11 @@ const wrap = (sym: string): string => {
   return `<${sym}>`;
 };
 
-// Provider component
 export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
-  children,
-  apiEndpoint = '/api/keystroke-data',
-  serverProbability
-}) => {
+                                                                      children,
+                                                                      apiEndpoint = '/api/keystroke-data',
+                                                                      serverProbability
+                                                                    }) => {
   // Data stores
   const dwellTimes = useRef<Record<string, number[]>>({});
   const flightTimes = useRef<Record<string, number[]>>({});
@@ -90,13 +90,19 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
           const ctxWrapped = ctx.map(c => wrap(c)).join('');
           const ngramKey = `[${ctxWrapped}]->[${wrapped}]`;
           addToArray(ngramTimes.current, ngramKey, Math.round(gap));
+
+          // Limit to last 50 timings
+          const arr = ngramTimes.current[ngramKey];
+          if (arr.length > NGRAM_LIMIT) {
+            arr.shift();
+          }
         }
       }
     }
 
     // Dwell start tracking
     dwellStarts.current[key] = now;
-    
+
     // Update context
     prevChars.current.push(key);
     if (prevChars.current.length > CONTEXT_K) {
@@ -126,14 +132,11 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
     element.addEventListener('keydown', onKeyDown as EventListener);
     element.addEventListener('keyup', onKeyUp as EventListener);
 
-    // Start auto-save timer (every hour)
-
-
     // Return cleanup function
     return () => {
       element.removeEventListener('keydown', onKeyDown as EventListener);
       element.removeEventListener('keyup', onKeyUp as EventListener);
-      
+
       // Clear auto-save timer if no more inputs are being tracked
       if (autoSaveTimer.current) {
         clearInterval(autoSaveTimer.current);
@@ -161,10 +164,10 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
     prevStamp.current = null;
   }, []);
 
- const sendData = useCallback(async (endpoint?: string): Promise<void> => {
+  const sendData = useCallback(async (endpoint?: string): Promise<void> => {
     const data = getKeystrokeData();
     const url = '/api/proxy/';
-    
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -173,11 +176,11 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
         },
         body: JSON.stringify(data),
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const result = await response.json();
       let probability = result.score;
 
@@ -185,9 +188,8 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
         console.warn('Server returned non-number probability:', probability);
         probability = parseFloat(probability) || 0;
       }
-      
+
       return probability;
-      // You can handle result.score here if needed, but do not return it
     } catch (error) {
       console.error('Failed to send keystroke data:', error);
       throw error;
@@ -203,9 +205,9 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
   };
 
   return (
-    <KeystrokeContext.Provider value={contextValue}>
-      {children}
-    </KeystrokeContext.Provider>
+      <KeystrokeContext.Provider value={contextValue}>
+        {children}
+      </KeystrokeContext.Provider>
   );
 };
 
@@ -233,7 +235,7 @@ export const useKeystrokeInput = () => {
 
     if (element) {
       const cleanup = attachToInput(element);
-      
+
       // Store cleanup function for later use
       (element as any).__keystrokeCleanup = cleanup;
     }
