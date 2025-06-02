@@ -2,17 +2,20 @@
 "use client";
 
 import { useState, useRef, useEffect } from 'react';
-import { useKeystrokeAnalysis } from '@/app/components/KeystrokeTrackerProvider';
+import { useKeystroke } from '@/app/components/KeystrokeTrackerProvider';
 
 export default function KeyTypingPage() {
   const [input, setInput] = useState('');
   const [botProbability, setBotProbability] = useState(0);
   const [keystrokes, setKeystrokes] = useState<Array<{ key: string; timestamp: number }>>([]);
   const [analysisResults, setAnalysisResults] = useState<any>(null);
+  const [keysPressedCount, setKeysPressedCount] = useState(0);
+  const [isServerLoading, setIsServerLoading] = useState(false);
+  const [serverProbability, setServerProbability] = useState<number | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Get keystroke analysis functions
-  const { attachToInput, getKeystrokeData, clearData } = useKeystrokeAnalysis();
+  // Get keystroke analysis functions from the provider
+  const { attachToInput, getKeystrokeData, clearData, sendData } = useKeystroke();
 
   // Attach keystroke analysis to textarea
   useEffect(() => {
@@ -34,18 +37,61 @@ export default function KeyTypingPage() {
         setBotProbability(analysis.botScore);
         
         // Output detailed results to console
+        console.log('Raw Data:', data);
+
+        /*
         console.log('=== KEYSTROKE ANALYSIS RESULTS ===');
         console.log('Bot Score:', analysis.botScore + '%');
         console.log('Confidence:', analysis.confidence + '%');
         console.log('Flags:', analysis.flags);
         console.log('Metrics:', analysis.metrics);
         console.log('Raw Data:', data);
+        */
         console.log('=====================================');
       }
-    }, 2000); // Analyze every 2 seconds
+    }, 15000); // Analyze every 2 seconds
 
     return () => clearInterval(interval);
   }, [getKeystrokeData]);
+
+  // Auto-trigger server analysis every 5 keystrokes
+  useEffect(() => {
+    if (keysPressedCount > 0 && keysPressedCount % 13 === 0) {
+      handleServerAnalysis();
+    }
+  }, [keysPressedCount]);
+
+  // Handle server analysis
+  const handleServerAnalysis = async () => {
+    const data = getKeystrokeData();
+    
+    // Only send if we have some keystroke data
+    if (Object.keys(data.ngram_times).length === 0 && Object.keys(data.dwell_times).length === 0) {
+      console.log('No keystroke data to analyze');
+      return;
+    }
+
+    setIsServerLoading(true);
+    
+    try {
+      // Send data to server and get the returned probability
+      const probability = await sendData();
+
+      if (typeof probability !== 'number') {
+        console.warn('Server returned non-number probability:', probability);
+        return;
+      } else {
+        console.log('Server returned probability:', probability *100);
+        setServerProbability(probability*100);
+      }
+      
+    } catch (error) {
+      console.error('Server analysis failed:', error);
+      // Optionally set an error state or show user feedback
+    } finally {
+      setIsServerLoading(false);
+    }
+  };
 
   // Bot detection analysis function (same as in the provider example)
   const analyzeKeystrokePatterns = (data: any) => {
@@ -68,7 +114,6 @@ export default function KeyTypingPage() {
 
     // Calculate dwell time metrics
     const allDwellTimes = Object.values(data.dwell_times).flat() as number[];
-  
     if (allDwellTimes.length > 0) {
       analysis.metrics.totalKeystrokes = allDwellTimes.length;
       analysis.metrics.avgDwellTime = allDwellTimes.reduce((a, b) => a + b, 0) / allDwellTimes.length;
@@ -91,9 +136,7 @@ export default function KeyTypingPage() {
       const flightVariance = allFlightTimes.reduce((acc, time) => 
         acc + Math.pow(time - analysis.metrics.avgFlightTime, 2), 0
       ) / allFlightTimes.length;
-      
       analysis.metrics.flightVariance = Math.sqrt(flightVariance);
-
     }
 
     // N-gram analysis
@@ -167,6 +210,9 @@ export default function KeyTypingPage() {
     setBotProbability(0);
     setKeystrokes([]);
     setAnalysisResults(null);
+    setKeysPressedCount(0);
+    setIsServerLoading(false);
+    setServerProbability(null);
     clearData(); // Clear the advanced keystroke data
     
     // Focus the textarea after reset
@@ -188,6 +234,9 @@ export default function KeyTypingPage() {
       ...prev,
       { key: e.key, timestamp: Date.now() }
     ]);
+    
+    // Increment keys pressed count for server trigger
+    setKeysPressedCount(prev => prev + 1);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -202,9 +251,9 @@ export default function KeyTypingPage() {
     }
   }, [keystrokes, analysisResults]);
 
-  const getBarColor = () => {
-    if (botProbability < 30) return 'bg-green-500';
-    if (botProbability < 70) return 'bg-orange-500';
+  const getBarColor = (score: number) => {
+    if (score < 30) return 'bg-green-500';
+    if (score < 70) return 'bg-orange-500';
     return 'bg-red-500';
   };
 
@@ -227,23 +276,34 @@ export default function KeyTypingPage() {
       
       <div className="bg-gray-50 rounded-lg p-6 mb-8 shadow-sm">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-2">Bot Probability: {botProbability}%</h2>
-          <div className="h-5 bg-gray-200 rounded-full overflow-hidden">
+          <div className="flex justify-between items-center mb-2">
+            <h2 className="text-xl font-semibold">Local Analysis: {botProbability}%</h2>
+            {serverProbability !== null && (
+              <span className="text-lg font-medium text-blue-600">
+                Server: {Math.round(serverProbability)}%
+              </span>
+            )}
+          </div>
+          <div className="h-5 bg-gray-200 rounded-full overflow-hidden mb-3">
             <div 
-              className={`h-full rounded-full transition-all duration-300 ${getBarColor()}`} 
+              className={`h-full rounded-full transition-all duration-300 ${getBarColor(botProbability)}`} 
               style={{ width: `${botProbability}%` }} 
             />
           </div>
-          {analysisResults && (
-            <p className="text-sm text-gray-600 mt-2">
-              Confidence: {analysisResults.confidence}% | Flags: {analysisResults.flags.length}
-            </p>
+          
+          {isServerLoading && (
+            <div className="flex items-center gap-2 text-blue-600">
+              <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+              <span>Analyzing with server...</span>
+            </div>
           )}
         </div>
         
         <div className="grid grid-cols-2 gap-4 text-gray-600">
           <p>Characters typed: {input.length}</p>
           <p>Keystrokes recorded: {keystrokes.length}</p>
+          <p>Keys until next server check: {5 - (keysPressedCount % 5)}</p>
+          <p>Server requests sent: {Math.floor(keysPressedCount / 5)}</p>
           {analysisResults && (
             <>
               <p>Dwell times: {analysisResults.metrics.totalKeystrokes}</p>
@@ -291,9 +351,16 @@ export default function KeyTypingPage() {
           </button>
           <button 
             className="bg-blue-600 hover:bg-blue-700 text-white py-2 px-6 rounded-md text-base transition-colors duration-200"
+            onClick={handleServerAnalysis}
+            disabled={isServerLoading}
+          >
+            {isServerLoading ? 'Analyzing...' : 'Force Server Analysis'}
+          </button>
+          <button 
+            className="bg-purple-600 hover:bg-purple-700 text-white py-2 px-6 rounded-md text-base transition-colors duration-200"
             onClick={handleAnalyze}
           >
-            Analyze Now
+            Analyze Local
           </button>
         </div>
       </div>
@@ -306,7 +373,8 @@ export default function KeyTypingPage() {
           <li className="mb-1"><strong>Flight Times:</strong> Time between releasing one key and pressing the next</li>
           <li className="mb-1"><strong>N-gram Analysis:</strong> Timing patterns for character sequences</li>
           <li className="mb-1"><strong>Variance Analysis:</strong> Consistency in timing patterns</li>
-          <li className="mb-1"><strong>Real-time Detection:</strong> Updates every 2 seconds with sufficient data</li>
+          <li className="mb-1"><strong>Real-time Detection:</strong> Server analysis every 5 keystrokes</li>
+          <li className="mb-1"><strong>Server Integration:</strong> External ML model validation</li>
         </ul>
         <div className="bg-white p-3 rounded border-l-4 border-blue-500">
           <p className="text-sm"><strong>Console Output:</strong> Check your browser's developer console (F12) for detailed analysis results including raw timing data, metrics, and detection flags.</p>

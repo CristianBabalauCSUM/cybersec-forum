@@ -39,7 +39,6 @@ export default async function RootLayout({
             </Providers> 
           </MouseTrackerProvider>
 
-          <TrackingScore />
       </body>
     </html>
   )

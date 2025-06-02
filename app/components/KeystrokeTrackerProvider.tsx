@@ -1,17 +1,17 @@
 'use client';
 
-import React, { createContext, useContext, useRef, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useCallback, useRef, useState } from 'react';
 
-// Configuration constants
-const MAX_MS = 1500;     // Hard cap: discard delays > 1500ms
-const GAP_MS = 1000;     // Burst split: drop delays ≥ 1000ms
-const CONTEXT_K = 5;     // Max n-gram context length
+// — tunables (in milliseconds) —
+const MAX_MS = 1500;
+const GAP_MS = 1000;
+const CONTEXT_K = 5;
 
 // Types
 interface KeystrokeData {
-  ngram_times: Record<string, number[]>;
   dwell_times: Record<string, number[]>;
   flight_times: Record<string, number[]>;
+  ngram_times: Record<string, number[]>;
 }
 
 interface KeystrokeContextType {
@@ -19,183 +19,151 @@ interface KeystrokeContextType {
   getKeystrokeData: () => KeystrokeData;
   clearData: () => void;
   sendData: (endpoint?: string) => Promise<void>;
+  serverProbability?: number;
+}
+
+interface KeystrokeProviderProps {
+  children: React.ReactNode;
+  apiEndpoint?: string;
+  serverProbability?: number;
 }
 
 // Create context
-const KeystrokeContext = createContext<KeystrokeContextType | null>(null);
+const KeystrokeContext = createContext<KeystrokeContextType | undefined>(undefined);
 
-// Custom hook to use the context
-export const useKeystrokeAnalysis = () => {
-  const context = useContext(KeystrokeContext);
-  if (!context) {
-    throw new Error('useKeystrokeAnalysis must be used within a KeystrokeProvider');
-  }
-  return context;
+// Utility functions
+const norm = (keyName: string): string => {
+  return keyName;
+};
+
+const wrap = (sym: string): string => {
+  return `<${sym}>`;
 };
 
 // Provider component
-export const KeystrokeProvider: React.FC<{ children: ReactNode; apiEndpoint?: string }> = ({ 
-  children, 
-  apiEndpoint = '/api/keystroke-analysis' 
+export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
+  children,
+  apiEndpoint = '/api/keystroke-data',
+  serverProbability
 }) => {
   // Data stores
-  const ngramTimes = useRef<Record<string, number[]>>({});
   const dwellTimes = useRef<Record<string, number[]>>({});
   const flightTimes = useRef<Record<string, number[]>>({});
-  
-  // Tracking state
-  const prevCharsBuf = useRef<string[]>([]);
-  const prevStamp = useRef<number | null>(null);
-  const dwellStartTimes = useRef<Record<string, number>>({});
-  const lastKeyUpStamp = useRef<number | null>(null);
-  const lastKeyUpKey = useRef<string | null>(null);
-  
-  // Active elements set to prevent duplicate listeners
-  const activeElements = useRef<Set<HTMLElement>>(new Set());
+  const ngramTimes = useRef<Record<string, number[]>>({});
 
-  // Normalize key names - wrap ALL keys in angle brackets
-  const normalizeKey = (key: string): string => {
-    // First normalize special keys to readable names
-    const keyMap: Record<string, string> = {
-      'Enter': 'enter',
-      'Backspace': 'backspace',
-      ' ': 'space',
-      'Tab': 'tab',
-      'Escape': 'escape',
-      'ArrowLeft': 'arrowleft',
-      'ArrowRight': 'arrowright',
-      'ArrowUp': 'arrowup',
-      'ArrowDown': 'arrowdown',
-      'Home': 'home',
-      'End': 'end',
-      'PageUp': 'pageup',
-      'PageDown': 'pagedown',
-      'Delete': 'delete',
-      'Insert': 'insert',
-      'Shift': 'shift',
-      'Control': 'ctrl',
-      'Alt': 'alt',
-      'Meta': 'meta'
-    };
-    
-    const normalizedKey = keyMap[key] || key.toLowerCase();
-    return `<${normalizedKey}>`;
+  // Tracking variables
+  const dwellStarts = useRef<Record<string, number>>({});
+  const lastKeyupStamp = useRef<number | null>(null);
+  const lastKeyupKey = useRef<string | null>(null);
+  const prevChars = useRef<string[]>([]);
+  const prevStamp = useRef<number | null>(null);
+
+  // Auto-save timer
+  const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const addToArray = (obj: Record<string, number[]>, key: string, value: number) => {
+    if (!obj[key]) {
+      obj[key] = [];
+    }
+    obj[key].push(value);
   };
 
-  // KeyDown event handler
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const key = normalizeKey(e.key);
+  const onKeyDown = useCallback((event: KeyboardEvent) => {
+    const key = norm(event.key);
     const now = performance.now();
+    const wrapped = wrap(key);
 
-    // Record flight time
-    if (lastKeyUpStamp.current !== null && lastKeyUpKey.current !== null) {
-      const flight = now - lastKeyUpStamp.current;
-      const flightKey = `[${lastKeyUpKey.current}]->[${key}]`;
-      if (!flightTimes.current[flightKey]) {
-        flightTimes.current[flightKey] = [];
-      }
-      flightTimes.current[flightKey].push(Math.round(flight));
+    // Flight time calculation
+    if (lastKeyupStamp.current !== null && lastKeyupKey.current !== null) {
+      const prevWrapped = wrap(lastKeyupKey.current);
+      const flightKey = `[${prevWrapped}]->[${wrapped}]`;
+      const flightTime = Math.round(now - lastKeyupStamp.current);
+      addToArray(flightTimes.current, flightKey, flightTime);
     }
 
-    // Record n-gram timings
-    if (prevCharsBuf.current.length > 0 && prevStamp.current !== null) {
+    // N-gram timing
+    if (prevStamp.current !== null && prevChars.current.length > 0) {
       const gap = now - prevStamp.current;
-      const sameBurst = gap < GAP_MS;
-      const withinCap = gap <= MAX_MS;
-
-      if (sameBurst && withinCap) {
-        for (let j = 1; j <= CONTEXT_K; j++) {
-          if (prevCharsBuf.current.length >= j) {
-            const ctxArr = prevCharsBuf.current.slice(-j);
-            const ctxStr = ctxArr.join(''); // Keys already have <> brackets
-            const ngramKey = `[${ctxStr}]->[${key}]`;
-            
-            if (!ngramTimes.current[ngramKey]) {
-              ngramTimes.current[ngramKey] = [];
-            }
-            ngramTimes.current[ngramKey].push(Math.round(gap));
-          }
+      if (gap < GAP_MS && gap <= MAX_MS) {
+        for (let j = 1; j <= prevChars.current.length; j++) {
+          const ctx = prevChars.current.slice(-j);
+          const ctxWrapped = ctx.map(c => wrap(c)).join('');
+          const ngramKey = `[${ctxWrapped}]->[${wrapped}]`;
+          addToArray(ngramTimes.current, ngramKey, Math.round(gap));
         }
       }
     }
 
-    // Start dwell timer
-    dwellStartTimes.current[key] = now;
-
-    // Update buffer and timestamp
-    prevCharsBuf.current.push(key);
-    if (prevCharsBuf.current.length > CONTEXT_K) {
-      prevCharsBuf.current.shift();
+    // Dwell start tracking
+    dwellStarts.current[key] = now;
+    
+    // Update context
+    prevChars.current.push(key);
+    if (prevChars.current.length > CONTEXT_K) {
+      prevChars.current.shift();
     }
     prevStamp.current = now;
   }, []);
 
-  // KeyUp event handler
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    const key = normalizeKey(e.key);
-    const nowUp = performance.now();
+  const onKeyUp = useCallback((event: KeyboardEvent) => {
+    const key = norm(event.key);
+    const now = performance.now();
 
-    // Record dwell time (remove <> for dwell_times keys)
-    if (dwellStartTimes.current[key] != null) {
-      const dwell = nowUp - dwellStartTimes.current[key];
-      const dwellKey = key.slice(1, -1); // Remove < and > for dwell_times
-      if (!dwellTimes.current[dwellKey]) {
-        dwellTimes.current[dwellKey] = [];
-      }
-      dwellTimes.current[dwellKey].push(Math.round(dwell));
-      delete dwellStartTimes.current[key];
+    // Calculate dwell time
+    if (dwellStarts.current[key] !== undefined) {
+      const dwell = Math.round(now - dwellStarts.current[key]);
+      addToArray(dwellTimes.current, wrap(key), dwell);
+      delete dwellStarts.current[key];
     }
 
-    // Prepare for next flight calculation
-    lastKeyUpStamp.current = nowUp;
-    lastKeyUpKey.current = key;
+    // Update last keyup tracking
+    lastKeyupStamp.current = now;
+    lastKeyupKey.current = key;
   }, []);
 
-  // Attach listeners to an input element
   const attachToInput = useCallback((element: HTMLInputElement | HTMLTextAreaElement) => {
-    // Prevent duplicate listeners
-    if (activeElements.current.has(element)) {
-      return () => {}; // Return empty cleanup function
-    }
+    // Add event listeners
+    element.addEventListener('keydown', onKeyDown as EventListener);
+    element.addEventListener('keyup', onKeyUp as EventListener);
 
-    activeElements.current.add(element);
-    
-    element.addEventListener('keydown', handleKeyDown as EventListener);
-    element.addEventListener('keyup', handleKeyUp as EventListener);
+    // Start auto-save timer (every hour)
+
 
     // Return cleanup function
     return () => {
-      activeElements.current.delete(element);
-      element.removeEventListener('keydown', handleKeyDown as EventListener);
-      element.removeEventListener('keyup', handleKeyUp as EventListener);
+      element.removeEventListener('keydown', onKeyDown as EventListener);
+      element.removeEventListener('keyup', onKeyUp as EventListener);
+      
+      // Clear auto-save timer if no more inputs are being tracked
+      if (autoSaveTimer.current) {
+        clearInterval(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
     };
-  }, [handleKeyDown, handleKeyUp]);
+  }, [onKeyDown, onKeyUp]);
 
-  // Get current keystroke data
   const getKeystrokeData = useCallback((): KeystrokeData => {
     return {
-      ngram_times: { ...ngramTimes.current },
       dwell_times: { ...dwellTimes.current },
-      flight_times: { ...flightTimes.current }
+      flight_times: { ...flightTimes.current },
+      ngram_times: { ...ngramTimes.current },
     };
   }, []);
 
-  // Clear all data
   const clearData = useCallback(() => {
-    ngramTimes.current = {};
     dwellTimes.current = {};
     flightTimes.current = {};
-    dwellStartTimes.current = {};
-    prevCharsBuf.current = [];
+    ngramTimes.current = {};
+    dwellStarts.current = {};
+    lastKeyupStamp.current = null;
+    lastKeyupKey.current = null;
+    prevChars.current = [];
     prevStamp.current = null;
-    lastKeyUpStamp.current = null;
-    lastKeyUpKey.current = null;
   }, []);
 
-  // Send data to API endpoint
-  const sendData = useCallback(async (endpoint?: string) => {
+ const sendData = useCallback(async (endpoint?: string): Promise<void> => {
     const data = getKeystrokeData();
-    const url = endpoint || apiEndpoint;
+    const url = '/api/proxy/';
     
     try {
       const response = await fetch(url, {
@@ -210,19 +178,28 @@ export const KeystrokeProvider: React.FC<{ children: ReactNode; apiEndpoint?: st
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      // Optionally clear data after successful send
-      // clearData();
+      const result = await response.json();
+      let probability = result.score;
+
+      if (typeof probability !== 'number') {
+        console.warn('Server returned non-number probability:', probability);
+        probability = parseFloat(probability) || 0;
+      }
+      
+      return probability;
+      // You can handle result.score here if needed, but do not return it
     } catch (error) {
       console.error('Failed to send keystroke data:', error);
       throw error;
     }
-  }, [getKeystrokeData, apiEndpoint]);
+  }, [getKeystrokeData]);
 
   const contextValue: KeystrokeContextType = {
     attachToInput,
     getKeystrokeData,
     clearData,
-    sendData
+    sendData,
+    serverProbability
   };
 
   return (
@@ -231,3 +208,46 @@ export const KeystrokeProvider: React.FC<{ children: ReactNode; apiEndpoint?: st
     </KeystrokeContext.Provider>
   );
 };
+
+// Hook to use the keystroke context
+export const useKeystroke = (): KeystrokeContextType => {
+  const context = useContext(KeystrokeContext);
+  if (context === undefined) {
+    throw new Error('useKeystroke must be used within a KeystrokeProvider');
+  }
+  return context;
+};
+
+// Hook for easy input attachment
+export const useKeystrokeInput = () => {
+  const { attachToInput } = useKeystroke();
+  const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+
+  const setInputRef = useCallback((element: HTMLInputElement | HTMLTextAreaElement | null) => {
+    // Clean up previous attachment
+    if (inputRef.current) {
+      // The cleanup function would have been called automatically
+    }
+
+    inputRef.current = element;
+
+    if (element) {
+      const cleanup = attachToInput(element);
+      
+      // Store cleanup function for later use
+      (element as any).__keystrokeCleanup = cleanup;
+    }
+  }, [attachToInput]);
+
+  React.useEffect(() => {
+    return () => {
+      if (inputRef.current && (inputRef.current as any).__keystrokeCleanup) {
+        (inputRef.current as any).__keystrokeCleanup();
+      }
+    };
+  }, []);
+
+  return { inputRef: setInputRef };
+};
+
+export default KeystrokeProvider;
