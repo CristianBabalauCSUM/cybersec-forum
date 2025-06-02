@@ -247,7 +247,7 @@ export default function KeyTypingPage() {
       <div className="bg-gray-50 rounded-lg p-6 mb-8 shadow-sm">
         <div className="mb-6">
           <div className="flex justify-between items-center mb-2">
-            <h2 className="text-xl font-semibold">
+            <h2 className="text-xl font-semibold" id ="bot-detection-score">
               Bot Detection: {botProbability}%
               {localAnalysis.isAnalyzing && (
                 <span className="ml-2 text-blue-600 text-sm">⚡ Analyzing...</span>
@@ -256,7 +256,7 @@ export default function KeyTypingPage() {
             <div className="text-sm space-y-1">
 
               {serverProbability > 0 && (
-                <div className="text-blue-600">
+                <div className="text-blue-600" id = "provider-server-score">
                   Provider Server: {Math.round(serverProbability * 100)}%
                 </div>
               )}
