@@ -6,7 +6,7 @@ import React, { createContext, useContext, useCallback, useRef, useState } from 
 const MAX_MS = 1500;
 const GAP_MS = 1000;
 const CONTEXT_K = 5;
-const NGRAM_LIMIT = 50; // keep only the last 50 timings per n-gram
+const NGRAM_TOTAL_LIMIT = 50; // keep only the last 50 n-gram entries overall
 
 // Types
 interface KeystrokeData {
@@ -19,7 +19,7 @@ interface KeystrokeContextType {
   attachToInput: (element: HTMLInputElement | HTMLTextAreaElement) => () => void;
   getKeystrokeData: () => KeystrokeData;
   clearData: () => void;
-  sendData: (endpoint?: string) => Promise<void>;
+  sendData: (endpoint?: string) => Promise<number>;
   serverProbability?: number;
 }
 
@@ -51,6 +51,9 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
   const flightTimes = useRef<Record<string, number[]>>({});
   const ngramTimes = useRef<Record<string, number[]>>({});
 
+  // Queue to track insertion order of n-grams (for global cap)
+  const ngramQueue = useRef<string[]>([]);
+
   // Tracking variables
   const dwellStarts = useRef<Record<string, number>>({});
   const lastKeyupStamp = useRef<number | null>(null);
@@ -58,7 +61,7 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
   const prevChars = useRef<string[]>([]);
   const prevStamp = useRef<number | null>(null);
 
-  // Auto-save timer
+  // Auto-save timer (unused in this snippet)
   const autoSaveTimer = useRef<NodeJS.Timeout | null>(null);
 
   const addToArray = (obj: Record<string, number[]>, key: string, value: number) => {
@@ -81,7 +84,7 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
       addToArray(flightTimes.current, flightKey, flightTime);
     }
 
-    // N-gram timing
+    // N-gram timing (using up to CONTEXT_K previous chars)
     if (prevStamp.current !== null && prevChars.current.length > 0) {
       const gap = now - prevStamp.current;
       if (gap < GAP_MS && gap <= MAX_MS) {
@@ -91,10 +94,19 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
           const ngramKey = `[${ctxWrapped}]->[${wrapped}]`;
           addToArray(ngramTimes.current, ngramKey, Math.round(gap));
 
-          // Limit to last 50 timings
-          const arr = ngramTimes.current[ngramKey];
-          if (arr.length > NGRAM_LIMIT) {
-            arr.shift();
+          // Record this insertion in the queue
+          ngramQueue.current.push(ngramKey);
+
+          // If we've exceeded the total cap, remove the oldest entry
+          if (ngramQueue.current.length > NGRAM_TOTAL_LIMIT) {
+            const oldestKey = ngramQueue.current.shift()!; // guaranteed non-undefined
+            const arr = ngramTimes.current[oldestKey];
+            if (arr) {
+              arr.shift(); // remove the oldest timing for that key
+              if (arr.length === 0) {
+                delete ngramTimes.current[oldestKey];
+              }
+            }
           }
         }
       }
@@ -137,7 +149,7 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
       element.removeEventListener('keydown', onKeyDown as EventListener);
       element.removeEventListener('keyup', onKeyUp as EventListener);
 
-      // Clear auto-save timer if no more inputs are being tracked
+      // Clear auto-save timer if needed
       if (autoSaveTimer.current) {
         clearInterval(autoSaveTimer.current);
         autoSaveTimer.current = null;
@@ -157,6 +169,7 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
     dwellTimes.current = {};
     flightTimes.current = {};
     ngramTimes.current = {};
+    ngramQueue.current = [];
     dwellStarts.current = {};
     lastKeyupStamp.current = null;
     lastKeyupKey.current = null;
@@ -164,9 +177,9 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
     prevStamp.current = null;
   }, []);
 
-  const sendData = useCallback(async (endpoint?: string): Promise<void> => {
+  const sendData = useCallback(async (endpoint?: string): Promise<number> => {
     const data = getKeystrokeData();
-    const url = '/api/proxy/';
+    const url = endpoint ?? '/api/proxy/';
 
     try {
       const response = await fetch(url, {
@@ -201,7 +214,7 @@ export const KeystrokeProvider: React.FC<KeystrokeProviderProps> = ({
     getKeystrokeData,
     clearData,
     sendData,
-    serverProbability
+    serverProbability,
   };
 
   return (
@@ -226,17 +239,15 @@ export const useKeystrokeInput = () => {
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
 
   const setInputRef = useCallback((element: HTMLInputElement | HTMLTextAreaElement | null) => {
-    // Clean up previous attachment
-    if (inputRef.current) {
-      // The cleanup function would have been called automatically
+    // Clean up previous attachment (if any)
+    if (inputRef.current && (inputRef.current as any).__keystrokeCleanup) {
+      (inputRef.current as any).__keystrokeCleanup();
     }
 
     inputRef.current = element;
 
     if (element) {
       const cleanup = attachToInput(element);
-
-      // Store cleanup function for later use
       (element as any).__keystrokeCleanup = cleanup;
     }
   }, [attachToInput]);
