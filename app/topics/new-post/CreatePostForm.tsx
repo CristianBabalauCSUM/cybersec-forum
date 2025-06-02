@@ -255,7 +255,25 @@ export default function CreatePostForm({ topics, session }: CreatePostFormProps)
               </p>
             </div>
           </CardContent>
-          
+          <CardFooter className="flex justify-between">
+
+            <div className="flex space-x-2">
+
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    Posting...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Post
+                  </>
+                )}
+              </Button>
+            </div>
+          </CardFooter>
         </form>
       </Card>
     </>
