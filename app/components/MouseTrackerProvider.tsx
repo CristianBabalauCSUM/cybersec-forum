@@ -53,7 +53,7 @@ type MouseTrackerData = {
 
 // Enhanced Configuration
 const CONFIG = {
-  minPointsForMovementAnalysis: 15,
+  minPointsForMovementAnalysis: 5,
   minClicksForAnalysis: 5,
   minPointsForCombined: 10,
   minClicksForCombined: 3,
@@ -64,8 +64,8 @@ const CONFIG = {
   // Teleportation detection settings
   teleportation: {
     // Distance thresholds (pixels)
-    minSuspiciousDistance: 100,
-    highSuspiciousDistance: 300,
+    minSuspiciousDistance: 150,
+    highSuspiciousDistance: 400,
     criticalDistance: 500,
     
     // Time thresholds (milliseconds)
