@@ -909,7 +909,7 @@ export const DeviceFingerprintDebug: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '200px',
+      bottom: '250px',
       left: '10px',
       background: 'rgba(0, 0, 0, 0.9)',
       color: 'white',
