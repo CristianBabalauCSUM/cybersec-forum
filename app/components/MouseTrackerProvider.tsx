@@ -371,8 +371,8 @@ export const MouseTrackerDebug: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      top: '20px',
-      right: '20px',
+      bottom: '20px',
+      left: '20px',
       background: 'rgba(0, 0, 0, 0.8)',
       color: 'white',
       padding: '10px',
