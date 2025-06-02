@@ -60,6 +60,7 @@ const CONFIG = {
   scoreUpdateInterval: 2000,
   maxDataPoints: 1000,
   enableDebug: true,
+
   
   // Teleportation detection settings
   teleportation: {
@@ -443,7 +444,7 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
       botScore: newBotScore,
       metrics: newMetrics,
       teleportationEvents: teleportationResult.events.length,
-      dataPoints: { movements: points.length, clicks: clicks.length }
+      dataPoints: { movements: points.length, clicks: clicks.length, points: points}
     });
     
     // Log critical teleportation events
@@ -548,13 +549,11 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
     document.addEventListener('click', handleClick, { passive: true });
     document.addEventListener('contextmenu', handleClick, { passive: true });
     
-    log('Event listeners attached');
     
     return () => {
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('click', handleClick);
       document.removeEventListener('contextmenu', handleClick);
-      log('Event listeners removed');
     };
   }, [isTracking, handleMouseMove, handleClick, log]);
 
