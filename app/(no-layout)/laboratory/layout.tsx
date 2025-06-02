@@ -15,11 +15,8 @@ export default function NoLayoutForLaboratory({ children }: { children: React.Re
     <>
       <DeviceFingerprintProvider>
 
-        <KeystrokeProvider >
           {children}
-          <KeystrokeDebug /> 
 
-        </KeystrokeProvider>
 
       </DeviceFingerprintProvider>
 

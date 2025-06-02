@@ -20,6 +20,12 @@ export default function LabsPage() {
             Fingerprint Data
           </Link>
           
+          <Link 
+            href="/laboratory/fingerprint-analysis" 
+            className="w-full block py-3 px-4 bg-indigo-900 hover:bg-indigo-300 text-white font-medium rounded-lg transition duration-200"
+          >
+            Fingerprint Data V2
+          </Link>
           {/* Lab 2 Button */}
           <Link 
             href="/laboratory/typing-checker" 
