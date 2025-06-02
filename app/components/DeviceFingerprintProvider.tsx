@@ -1039,14 +1039,6 @@ export const DeviceFingerprintDebug: React.FC = () => {
             )}
           </div>
 
-          {/* Graphics Info */}
-          <div style={{ fontSize: '9px', borderTop: '1px solid #444', paddingTop: '6px', marginBottom: '6px' }}>
-            <div style={{ fontWeight: 'bold', marginBottom: '3px' }}>Graphics:</div>
-            <div>Vendor: {fingerprint.graphics.webglVendor.substring(0, 20)}...</div>
-            <div>Renderer: {fingerprint.graphics.webglRenderer.substring(0, 20)}...</div>
-            <div>Formats: {fingerprint.graphics.supportedFormats.join(', ')}</div>
-          </div>
-
           
         </>
       ) : (
