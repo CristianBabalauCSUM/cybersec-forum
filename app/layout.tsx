@@ -15,6 +15,7 @@ import TrackingScore from "./components/TrackingScore"
 import {MouseTrackerProvider, MouseTrackerDebug} from "./components/MouseTrackerProvider"
 import { KeystrokeProvider, KeystrokeDebug } from "@/app/components/KeystrokeTrackerProvider"
 import { DeviceFingerprintProvider, DeviceFingerprintDebug } from "@/app/components/DeviceFingerprintProvider";
+import { TrustScoringProvider, TrustScoreDebug } from "./components/TrustScoreProvider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -38,12 +39,16 @@ export default async function RootLayout({
       <DeviceFingerprintProvider>
           <MouseTrackerProvider>
             <Providers> 
+              <TrustScoringProvider>
                 <KeystrokeProvider >
                   <main className="container mx-auto px-4 py-8">{children}</main>
                   <KeystrokeDebug /> 
                   <MouseTrackerDebug />
                   <DeviceFingerprintDebug />
+                              <TrustScoreDebug/>
+
                 </KeystrokeProvider>
+                </TrustScoringProvider>
             </Providers> 
           </MouseTrackerProvider>
       </DeviceFingerprintProvider>
