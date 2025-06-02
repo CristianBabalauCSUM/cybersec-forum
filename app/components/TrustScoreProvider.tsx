@@ -9,7 +9,6 @@ interface TrustScore {
   overall: number; // 0-100 trust score
   components: {
     device: number;      // Device fingerprint trust
-    behavior: number;    // Mouse/keyboard behavior trust  
     botDetection: number; // Bot detection confidence
     consistency: number;  // Cross-session consistency
   };
@@ -52,7 +51,6 @@ export const TrustScoringProvider: React.FC<TrustScoringProviderProps> = ({
     overall: 50,
     components: {
       device: 50,
-      behavior: 50,
       botDetection: 50,
       consistency: 50
     },
@@ -111,42 +109,6 @@ export const TrustScoringProvider: React.FC<TrustScoringProviderProps> = ({
   }, []);
 
   // Calculate behavior trust score
-  const calculateBehaviorTrust = useCallback((keystroke: any, mouse: any): number => {
-    let score = 70; // Start neutral
-    const riskFactors: string[] = [];
-
-    // Keystroke analysis
-    if (keystroke) {
-      if (keystroke.localAnalysis?.botScore > 70) {
-        score -= 30;
-        riskFactors.push('Suspicious typing patterns');
-      } else if (keystroke.localAnalysis?.botScore < 30) {
-        score += 10; // Human-like typing
-      }
-
-      if (keystroke.serverProbability > 0.7) {
-        score -= 25;
-        riskFactors.push('Server flagged typing');
-      }
-    }
-
-    // Mouse analysis
-    if (mouse) {
-      if (mouse.botScore > 70) {
-        score -= 25;
-        riskFactors.push('Robotic mouse movement');
-      } else if (mouse.botScore < 30) {
-        score += 10; // Human-like movement
-      }
-
-      if (mouse.teleportationEvents?.length > 5) {
-        score -= 20;
-        riskFactors.push('Teleportation detected');
-      }
-    }
-
-    return Math.max(0, Math.min(100, score));
-  }, []);
 
   // Calculate bot detection trust score using BotD
   const calculateBotDetectionTrust = useCallback(async (): Promise<{ score: number; factors: string[] }> => {
@@ -218,21 +180,18 @@ export const TrustScoringProvider: React.FC<TrustScoringProviderProps> = ({
       
       // Calculate component scores
       const deviceScore = calculateDeviceTrust(deviceFingerprint);
-      const behaviorScore = calculateBehaviorTrust(keystrokeAnalysis, mouseAnalysis);
       const { score: botScore, factors: botFactors } = await calculateBotDetectionTrust();
       const consistencyScore = calculateConsistencyTrust();
 
       // Weighted overall score
       const weights = {
-        device: 0.25,
-        behavior: 0.35,
-        botDetection: 0.30,
+        device: 0.50,
+        botDetection: 0.40,
         consistency: 0.10
       };
 
       const overall = Math.round(
         deviceScore * weights.device +
-        behaviorScore * weights.behavior +
         botScore * weights.botDetection +
         consistencyScore * weights.consistency
       );
@@ -241,14 +200,12 @@ export const TrustScoringProvider: React.FC<TrustScoringProviderProps> = ({
       const allRiskFactors: string[] = [...botFactors];
       
       if (deviceScore < 50) allRiskFactors.push('Device fingerprint suspicious');
-      if (behaviorScore < 50) allRiskFactors.push('Behavior patterns suspicious');
       if (consistencyScore < 50) allRiskFactors.push('Inconsistent session history');
 
       const newTrustScore: TrustScore = {
         overall,
         components: {
           device: Math.round(deviceScore),
-          behavior: Math.round(behaviorScore),
           botDetection: Math.round(botScore),
           consistency: Math.round(consistencyScore)
         },
@@ -276,7 +233,7 @@ export const TrustScoringProvider: React.FC<TrustScoringProviderProps> = ({
     } finally {
       setIsAnalyzing(false);
     }
-  }, [deviceFingerprint, keystrokeAnalysis, mouseAnalysis, calculateDeviceTrust, calculateBehaviorTrust, calculateBotDetectionTrust, calculateConsistencyTrust]);
+  }, [deviceFingerprint, keystrokeAnalysis, mouseAnalysis, calculateDeviceTrust, calculateBotDetectionTrust, calculateConsistencyTrust]);
 
   // Auto-refresh trust score
   useEffect(() => {
@@ -389,7 +346,6 @@ export const TrustScoreDebug: React.FC = () => {
       <div style={{ fontSize: '10px', marginBottom: '8px' }}>
         <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>Components:</div>
         <div>Device: <span style={{ color: getColorForScore(trustScore.components.device) }}>{trustScore.components.device}%</span></div>
-        <div>Behavior: <span style={{ color: getColorForScore(trustScore.components.behavior) }}>{trustScore.components.behavior}%</span></div>
         <div>Bot Detection: <span style={{ color: getColorForScore(trustScore.components.botDetection) }}>{trustScore.components.botDetection}%</span></div>
         <div>Consistency: <span style={{ color: getColorForScore(trustScore.components.consistency) }}>{trustScore.components.consistency}%</span></div>
       </div>
