@@ -373,8 +373,8 @@ export default function KeyTypingPage() {
           <li className="mb-1"><strong>Flight Times:</strong> Time between releasing one key and pressing the next</li>
           <li className="mb-1"><strong>N-gram Analysis:</strong> Timing patterns for character sequences</li>
           <li className="mb-1"><strong>Variance Analysis:</strong> Consistency in timing patterns</li>
-          <li className="mb-1"><strong>Real-time Detection:</strong> Server analysis every 5 keystrokes</li>
-          <li className="mb-1"><strong>Server Integration:</strong> External ML model validation</li>
+          <li className="mb-1"><strong>Real-time Detection:</strong> Server analysis every 13 keystrokes</li>
+          <li className="mb-1"><strong>Server Integration:</strong> External validation</li>
         </ul>
         <div className="bg-white p-3 rounded border-l-4 border-blue-500">
           <p className="text-sm"><strong>Console Output:</strong> Check your browser's developer console (F12) for detailed analysis results including raw timing data, metrics, and detection flags.</p>
