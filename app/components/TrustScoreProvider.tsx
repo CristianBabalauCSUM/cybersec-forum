@@ -284,7 +284,7 @@ export const TrustScoreDebug: React.FC = () => {
   return (
     <div style={{
       position: 'fixed',
-      bottom: '150px',
+      bottom: '250px',
       right: '10px',
       background: 'rgba(0, 0, 0, 0.9)',
       color: 'white',
