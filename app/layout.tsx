@@ -11,7 +11,8 @@ import {
   FingerprintJSPro
 } from '@fingerprintjs/fingerprintjs-pro-react'
 import Providers from './providers'
-
+import TrackingScore from "./components/TrackingScore"
+import {MouseTrackerProvider, MouseTrackerDebug} from "./components/MouseTrackerProvider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -31,9 +32,14 @@ export default async function RootLayout({
     <html lang="en">
       <body className={inter.className}>
           <Navbar />
-          <Providers> 
-            <main className="container mx-auto px-4 py-8">{children}</main>
-          </Providers>
+          <MouseTrackerProvider>
+            <Providers> 
+              <main className="container mx-auto px-4 py-8">{children}</main>
+              <MouseTrackerDebug />
+            </Providers> 
+          </MouseTrackerProvider>
+
+          <TrackingScore />
       </body>
     </html>
   )

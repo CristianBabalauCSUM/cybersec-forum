@@ -330,6 +330,7 @@ export default function MouseTracker({ onScoreUpdate }: Props) {
       }
     }
   };
+  
   const highlightStraightSegments = (ctx: CanvasRenderingContext2D) => {
     if (points.length < 10) return;
     
