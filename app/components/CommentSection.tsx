@@ -1,9 +1,10 @@
 // /components/CommentSection.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { formatDistance } from "date-fns";
 import { useRouter } from "next/navigation";
+import { useKeystroke } from '@/app/components/KeystrokeTrackerProvider';
 
 interface Author {
   username: string;
@@ -42,9 +43,70 @@ export default function CommentSection({ postId, comments: initialComments }: Co
   const [activeReplies, setActiveReplies] = useState<Record<string, boolean>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Refs for keystroke tracking
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const replyTextareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  // Get keystroke tracking from provider
+  const { 
+    attachToInput, 
+    getKeystrokeData, 
+    getMetrics,
+    clearData, 
+    serverProbability,
+    localAnalysis,
+    debugInfo 
+  } = useKeystroke();
+
+  // Attach keystroke tracking to main comment textarea
+  useEffect(() => {
+    if (commentTextareaRef.current) {
+      const cleanup = attachToInput(commentTextareaRef.current);
+      console.log('Keystroke tracking attached to comment textarea');
+      return cleanup;
+    }
+  }, [attachToInput]);
+
+  // Function to attach tracking to reply textareas
+  const attachToReplyTextarea = (commentId: string, element: HTMLTextAreaElement | null) => {
+    if (element) {
+      // Clean up previous attachment if any
+      const prevElement = replyTextareaRefs.current[commentId];
+      if (prevElement && (prevElement as any).__keystrokeCleanup) {
+        (prevElement as any).__keystrokeCleanup();
+      }
+
+      // Store reference and attach tracking
+      replyTextareaRefs.current[commentId] = element;
+      const cleanup = attachToInput(element);
+      (element as any).__keystrokeCleanup = cleanup;
+      console.log(`Keystroke tracking attached to reply textarea for comment ${commentId}`);
+    }
+  };
+
+  // Cleanup reply textarea tracking when replies are closed
+  useEffect(() => {
+    return () => {
+      Object.values(replyTextareaRefs.current).forEach(element => {
+        if (element && (element as any).__keystrokeCleanup) {
+          (element as any).__keystrokeCleanup();
+        }
+      });
+    };
+  }, []);
+
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newComment.trim() || isSubmitting) return;
+
+    // Log keystroke analysis for comment submission
+    console.log('=== COMMENT SUBMISSION KEYSTROKE ANALYSIS ===');
+    console.log('Keystroke Data:', getKeystrokeData());
+    console.log('Metrics:', getMetrics());
+    console.log('Local Analysis:', localAnalysis);
+    console.log('Server Probability:', serverProbability);
+    console.log('Debug Info:', debugInfo);
+    console.log('=============================================');
 
     setIsSubmitting(true);
     try {
@@ -56,6 +118,13 @@ export default function CommentSection({ postId, comments: initialComments }: Co
         body: JSON.stringify({
           postId,
           content: newComment,
+          // Include keystroke analysis data (optional)
+          keystrokeData: {
+            localBotScore: localAnalysis.botScore,
+            serverBotScore: Math.round(serverProbability * 100),
+            totalKeys: debugInfo.totalKeys,
+            metrics: getMetrics()
+          }
         }),
       });
 
@@ -66,6 +135,11 @@ export default function CommentSection({ postId, comments: initialComments }: Co
       const comment = await response.json();
       setComments([comment, ...comments]);
       setNewComment("");
+      
+      // Clear keystroke data after successful submission
+      clearData();
+      console.log('Comment submitted successfully, keystroke data cleared');
+      
       router.refresh();
     } catch (error) {
       console.error("Error posting comment:", error);
@@ -86,6 +160,16 @@ export default function CommentSection({ postId, comments: initialComments }: Co
     const replyContent = replyContents[commentId];
     if (!replyContent?.trim() || isSubmitting) return;
 
+    // Log keystroke analysis for reply submission
+    console.log('=== REPLY SUBMISSION KEYSTROKE ANALYSIS ===');
+    console.log('Reply to comment:', commentId);
+    console.log('Keystroke Data:', getKeystrokeData());
+    console.log('Metrics:', getMetrics());
+    console.log('Local Analysis:', localAnalysis);
+    console.log('Server Probability:', serverProbability);
+    console.log('Debug Info:', debugInfo);
+    console.log('==========================================');
+
     setIsSubmitting(true);
     try {
       const response = await fetch("/api/comments", {
@@ -97,6 +181,13 @@ export default function CommentSection({ postId, comments: initialComments }: Co
           postId,
           parentId: commentId,
           content: replyContent,
+          // Include keystroke analysis data (optional)
+          keystrokeData: {
+            localBotScore: localAnalysis.botScore,
+            serverBotScore: Math.round(serverProbability * 100),
+            totalKeys: debugInfo.totalKeys,
+            metrics: getMetrics()
+          }
         }),
       });
 
@@ -126,6 +217,15 @@ export default function CommentSection({ postId, comments: initialComments }: Co
         ...activeReplies,
         [commentId]: false,
       });
+      
+      // Clean up reply textarea tracking
+      const element = replyTextareaRefs.current[commentId];
+      if (element && (element as any).__keystrokeCleanup) {
+        (element as any).__keystrokeCleanup();
+      }
+      delete replyTextareaRefs.current[commentId];
+      
+      console.log('Reply submitted successfully, keystroke tracking cleaned up');
       router.refresh();
     } catch (error) {
       console.error("Error posting reply:", error);
@@ -193,28 +293,75 @@ export default function CommentSection({ postId, comments: initialComments }: Co
     }
   };
 
+  // Get current bot score for display
+  const getCurrentBotScore = () => {
+    if (serverProbability > 0) return Math.round(serverProbability * 100);
+    if (localAnalysis.botScore > 0) return localAnalysis.botScore;
+    return 0;
+  };
+
+  const currentBotScore = getCurrentBotScore();
+
   return (
     <div className="space-y-6">
+      {/* Keystroke Analysis Display (only show if there's typing activity) */}
+      {debugInfo.totalKeys > 3 && (
+        <div className={`p-3 rounded-lg border ${
+          currentBotScore > 70 ? 'bg-red-50 border-red-200' : 
+          currentBotScore > 40 ? 'bg-orange-50 border-orange-200' : 
+          'bg-green-50 border-green-200'
+        }`}>
+          <div className="flex justify-between items-center text-sm">
+            <div className="flex items-center space-x-2">
+              <span className="font-medium">Typing Analysis:</span>
+              <span className={`font-bold ${
+                currentBotScore > 70 ? 'text-red-600' : 
+                currentBotScore > 40 ? 'text-orange-600' : 
+                'text-green-600'
+              }`}>
+                {currentBotScore}% Bot Score
+              </span>
+              {localAnalysis.isAnalyzing && (
+                <span className="text-blue-600">⚡</span>
+              )}
+            </div>
+            <div className="text-xs text-gray-500">
+              {debugInfo.totalKeys} keystrokes • {Math.floor(debugInfo.totalKeys / 13)} server calls
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Comment form */}
       <div className="mt-8">
         <h3 className="text-lg font-medium mb-4">Leave a comment</h3>
         <form className="space-y-4" onSubmit={handleSubmitComment}>
           <textarea
+            ref={commentTextareaRef}
             className="w-full border rounded-md p-3 h-32 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="Write your comment here..."
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
             required
           ></textarea>
-          <button
-            type="submit"
-            className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${
-              isSubmitting ? "opacity-50 cursor-not-allowed" : ""
-            }`}
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? "Posting..." : "Post Comment"}
-          </button>
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-500">
+              {debugInfo.totalKeys > 0 && (
+                <span>
+                  Keystroke analysis active • Next server call: {13 - (debugInfo.totalKeys % 13)} keys
+                </span>
+              )}
+            </div>
+            <button
+              type="submit"
+              className={`px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 ${
+                isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Posting..." : "Post Comment"}
+            </button>
+          </div>
         </form>
       </div>
 
@@ -274,6 +421,7 @@ export default function CommentSection({ postId, comments: initialComments }: Co
               {activeReplies[comment.id] && (
                 <div className="mt-3 pl-4">
                   <textarea
+                    ref={(el) => attachToReplyTextarea(comment.id, el)}
                     className="w-full border rounded-md p-2 h-20 resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     placeholder="Write your reply..."
                     value={replyContents[comment.id] || ""}
@@ -284,7 +432,12 @@ export default function CommentSection({ postId, comments: initialComments }: Co
                       })
                     }
                   ></textarea>
-                  <div className="mt-2 flex justify-end">
+                  <div className="mt-2 flex justify-between items-center">
+                    <div className="text-xs text-gray-500">
+                      {debugInfo.totalKeys > 0 && (
+                        <span>Keystroke tracking active</span>
+                      )}
+                    </div>
                     <button
                       className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                       onClick={() => handleSubmitReply(comment.id)}

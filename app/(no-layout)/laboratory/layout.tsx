@@ -1,9 +1,7 @@
 // app/layout.tsx
 import "@/styles/globals.css"
-import { KeystrokeProvider, KeystrokeDebug } from '@/app/components/KeystrokeTrackerProvider';
 
 import type React from "react"
-import { DeviceFingerprintProvider, DeviceFingerprintDebug } from "@/app/components/DeviceFingerprintProvider";
 
 export const metadata = {
   title: 'Laboratory',
@@ -13,12 +11,7 @@ export const metadata = {
 export default function NoLayoutForLaboratory({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <DeviceFingerprintProvider>
-          {children}
-
-          <DeviceFingerprintDebug />
-      </DeviceFingerprintProvider>
-
+      {children}
     </>
   );
 }

@@ -602,7 +602,6 @@ export const DeviceFingerprintProvider: React.FC<{
     try {
       // Multiple detection methods
       
-      // Method 1: localStorage test
       try {
         localStorage.setItem('__test__', 'test');
         localStorage.removeItem('__test__');
@@ -610,7 +609,6 @@ export const DeviceFingerprintProvider: React.FC<{
         return true;
       }
 
-      // Method 2: IndexedDB test
       if (!window.indexedDB) {
         return true;
       }
