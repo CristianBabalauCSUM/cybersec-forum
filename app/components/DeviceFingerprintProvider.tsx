@@ -64,6 +64,7 @@ interface AudioInfo {
   numberOfInputs: number;
   numberOfOutputs: number;
   baseLatency?: number;
+  contextState: string;
 }
 
 interface FontInfo {
@@ -280,72 +281,121 @@ export const DeviceFingerprintProvider: React.FC<{
     });
   };
 
-  // Audio fingerprinting
+  // Modern audio fingerprinting using AudioWorklet
   const getAudioInfo = async (): Promise<AudioInfo> => {
     try {
+      // Create AudioContext without auto-starting
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const fingerprint = await generateAudioFingerprint(audioContext);
       
-      return {
-        audioFingerprint: fingerprint,
+      const info: AudioInfo = {
+        audioFingerprint: 'audio-unavailable',
         sampleRate: audioContext.sampleRate,
         maxChannelCount: audioContext.destination.maxChannelCount,
         numberOfInputs: audioContext.destination.numberOfInputs,
         numberOfOutputs: audioContext.destination.numberOfOutputs,
-        baseLatency: (audioContext as any).baseLatency
+        baseLatency: (audioContext as any).baseLatency,
+        contextState: audioContext.state
       };
-    } catch {
+
+      // Only try to generate fingerprint if context is allowed to start
+      if (audioContext.state === 'running' || audioContext.state === 'suspended') {
+        try {
+          // Use offline context for fingerprinting to avoid user gesture requirement
+          const offlineContext = new OfflineAudioContext(1, 44100, 44100);
+          const fingerprint = await generateOfflineAudioFingerprint(offlineContext);
+          info.audioFingerprint = fingerprint;
+        } catch (error) {
+          console.warn('Audio fingerprinting failed:', error);
+          info.audioFingerprint = 'fingerprint-failed';
+        }
+      }
+
+      // Clean up
+      if (audioContext.state !== 'closed') {
+        await audioContext.close();
+      }
+
+      return info;
+    } catch (error) {
+      console.warn('Audio context creation failed:', error);
       return {
         audioFingerprint: 'audio-unavailable',
         sampleRate: 0,
         maxChannelCount: 0,
         numberOfInputs: 0,
-        numberOfOutputs: 0
+        numberOfOutputs: 0,
+        contextState: 'unavailable'
       };
     }
   };
 
-  // Generate audio fingerprint
-  const generateAudioFingerprint = (audioContext: AudioContext): Promise<string> => {
-    return new Promise((resolve) => {
-      const oscillator = audioContext.createOscillator();
-      const analyser = audioContext.createAnalyser();
-      const gainNode = audioContext.createGain();
-      const scriptProcessor = audioContext.createScriptProcessor(4096, 1, 1);
+  // Generate audio fingerprint using OfflineAudioContext (no user gesture required)
+  const generateOfflineAudioFingerprint = (offlineContext: OfflineAudioContext): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      try {
+        const oscillator = offlineContext.createOscillator();
+        const analyser = offlineContext.createAnalyser();
+        const gainNode = offlineContext.createGain();
 
-      oscillator.type = 'triangle';
-      oscillator.frequency.setValueAtTime(10000, audioContext.currentTime);
-      gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+        oscillator.type = 'triangle';
+        oscillator.frequency.setValueAtTime(10000, offlineContext.currentTime);
+        gainNode.gain.setValueAtTime(0.01, offlineContext.currentTime);
 
-      oscillator.connect(analyser);
-      analyser.connect(scriptProcessor);
-      scriptProcessor.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+        oscillator.connect(analyser);
+        analyser.connect(gainNode);
+        gainNode.connect(offlineContext.destination);
 
-      scriptProcessor.onaudioprocess = (event) => {
-        const output = event.outputBuffer.getChannelData(0);
-        const hash = Array.from(output.slice(0, 100))
-          .map(x => Math.round(x * 1000))
-          .join('');
-        
-        oscillator.disconnect();
-        scriptProcessor.disconnect();
-        resolve(hash.substring(0, 50));
-      };
+        oscillator.start(0);
+        oscillator.stop(0.1);
 
-      oscillator.start(0);
-      oscillator.stop(audioContext.currentTime + 0.1);
+        offlineContext.startRendering().then((renderedBuffer) => {
+          const output = renderedBuffer.getChannelData(0);
+          const hash = Array.from(output.slice(0, 100))
+            .map(x => Math.round(x * 1000000))
+            .join('');
+          
+          resolve(hash.substring(0, 50));
+        }).catch(reject);
+
+      } catch (error) {
+        reject(error);
+      }
     });
   };
 
-  // Font detection
+  // Enhanced font detection with more comprehensive list
   const getFontInfo = (): FontInfo => {
     const testFonts = [
+      // Common system fonts
       'Arial', 'Helvetica', 'Times New Roman', 'Courier New', 'Verdana',
       'Georgia', 'Palatino', 'Garamond', 'Bookman', 'Comic Sans MS',
       'Trebuchet MS', 'Arial Black', 'Impact', 'Lucida Sans Unicode',
       'Tahoma', 'Lucida Console', 'Monaco', 'Courier', 'Bradley Hand',
-      'Brush Script MT', 'Luminari', 'Chalkduster'
+      'Brush Script MT', 'Luminari', 'Chalkduster',
+      
+      // Windows fonts
+      'Calibri', 'Cambria', 'Consolas', 'Constantia', 'Corbel',
+      'Candara', 'Franklin Gothic Medium', 'Gabriola', 'Malgun Gothic',
+      'Microsoft Sans Serif', 'MS Gothic', 'MS PGothic', 'MS UI Gothic',
+      'MV Boli', 'Myanmar Text', 'Nirmala UI', 'Segoe Print',
+      'Segoe Script', 'Segoe UI', 'Segoe UI Historic', 'Segoe UI Symbol',
+      'Sitka', 'Sylfaen', 'Yu Gothic',
+      
+      // macOS fonts
+      'American Typewriter', 'Andale Mono', 'Apple Chancery', 'Apple Color Emoji',
+      'Apple SD Gothic Neo', 'Arial Hebrew', 'Arial Rounded MT Bold',
+      'Avenir', 'Avenir Next', 'Baskerville', 'Big Caslon', 'Bodoni 72',
+      'Copperplate', 'Didot', 'Futura', 'Geneva', 'Gill Sans',
+      'Helvetica Neue', 'Herculanum', 'Hoefler Text', 'Lucida Grande',
+      'Marker Felt', 'Menlo', 'Optima', 'Papyrus', 'Phosphate',
+      'Rockwell', 'Savoye LET', 'SignPainter', 'Skia', 'Snell Roundhand',
+      'Zapfino',
+      
+      // Linux fonts
+      'Liberation Sans', 'Liberation Serif', 'Liberation Mono',
+      'DejaVu Sans', 'DejaVu Serif', 'DejaVu Sans Mono',
+      'Ubuntu', 'Ubuntu Mono', 'Droid Sans', 'Droid Serif', 'Droid Sans Mono',
+      'Noto Sans', 'Noto Serif', 'Source Sans Pro', 'Source Serif Pro'
     ];
 
     const availableFonts = testFonts.filter(font => isFontAvailable(font));
@@ -358,22 +408,29 @@ export const DeviceFingerprintProvider: React.FC<{
     };
   };
 
-  // Check if font is available
+  // Improved font detection
   const isFontAvailable = (fontName: string): boolean => {
-    const testString = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const testString = 'mmmmmmmmmmlli';
     const testSize = '72px';
-    const fallbackFont = 'monospace';
+    const fallbackFonts = ['monospace', 'sans-serif', 'serif'];
 
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d')!;
 
-    context.font = `${testSize} ${fallbackFont}`;
-    const fallbackWidth = context.measureText(testString).width;
+    // Test against multiple fallback fonts for better accuracy
+    for (const fallbackFont of fallbackFonts) {
+      context.font = `${testSize} ${fallbackFont}`;
+      const fallbackWidth = context.measureText(testString).width;
 
-    context.font = `${testSize} ${fontName}, ${fallbackFont}`;
-    const testWidth = context.measureText(testString).width;
+      context.font = `${testSize} "${fontName}", ${fallbackFont}`;
+      const testWidth = context.measureText(testString).width;
 
-    return testWidth !== fallbackWidth;
+      if (testWidth !== fallbackWidth) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // Generate font fingerprint
@@ -382,13 +439,13 @@ export const DeviceFingerprintProvider: React.FC<{
     const ctx = canvas.getContext('2d')!;
     
     let fingerprint = '';
-    fonts.forEach(font => {
-      ctx.font = `12px ${font}`;
+    fonts.slice(0, 20).forEach(font => { // Limit to first 20 fonts for performance
+      ctx.font = `12px "${font}"`;
       const metrics = ctx.measureText('The quick brown fox jumps over the lazy dog');
-      fingerprint += `${font}:${metrics.width}`;
+      fingerprint += `${font}:${metrics.width.toFixed(2)};`;
     });
 
-    return btoa(fingerprint).substring(0, 32);
+    return btoa(fingerprint).replace(/[+/=]/g, '').substring(0, 32);
   };
 
   // Network information
@@ -405,13 +462,22 @@ export const DeviceFingerprintProvider: React.FC<{
     };
   };
 
-  // Sensor information
+  // Enhanced sensor information
   const getSensorInfo = async (): Promise<SensorInfo> => {
     const info: SensorInfo = {
-      motionSupported: 'DeviceMotionEvent' in window,
-      orientationSupported: 'DeviceOrientationEvent' in window,
+      motionSupported: 'DeviceMotionEvent' in window && typeof (DeviceMotionEvent as any).requestPermission !== 'function',
+      orientationSupported: 'DeviceOrientationEvent' in window && typeof (DeviceOrientationEvent as any).requestPermission !== 'function',
       vibrationSupported: 'vibrate' in navigator
     };
+
+    // Check for iOS permission-based sensors
+    if ('DeviceMotionEvent' in window && typeof (DeviceMotionEvent as any).requestPermission === 'function') {
+      info.motionSupported = false; // Will require permission
+    }
+
+    if ('DeviceOrientationEvent' in window && typeof (DeviceOrientationEvent as any).requestPermission === 'function') {
+      info.orientationSupported = false; // Will require permission
+    }
 
     try {
       if ('getBattery' in navigator) {
@@ -420,7 +486,7 @@ export const DeviceFingerprintProvider: React.FC<{
         info.batteryCharging = battery.charging;
       }
     } catch {
-      // Battery API not available
+      // Battery API not available or blocked
     }
 
     return info;
@@ -436,17 +502,22 @@ export const DeviceFingerprintProvider: React.FC<{
     };
   };
 
-  // Performance information
+  // Enhanced performance information
   const getPerformanceInfo = (): PerformanceInfo => {
     const info: PerformanceInfo = {
       performanceNowPrecision: getPerformancePrecision()
     };
 
-    // Memory information (Chrome only)
+    // Memory information (Chrome/Edge only)
     if ('memory' in performance) {
       const memory = (performance as any).memory;
       info.memoryUsed = memory.usedJSHeapSize;
       info.memoryTotal = memory.totalJSHeapSize;
+    }
+
+    // CPU class (IE only, but useful for fingerprinting)
+    if ('cpuClass' in navigator) {
+      info.cpuClass = (navigator as any).cpuClass;
     }
 
     return info;
@@ -454,113 +525,237 @@ export const DeviceFingerprintProvider: React.FC<{
 
   // Get performance.now() precision
   const getPerformancePrecision = (): number => {
-    const start = performance.now();
-    let precision = 0;
+    const measurements: number[] = [];
     
     for (let i = 0; i < 10; i++) {
-      const time = performance.now() - start;
-      const timeStr = time.toString();
-      const decimalIndex = timeStr.indexOf('.');
-      if (decimalIndex !== -1) {
-        precision = Math.max(precision, timeStr.length - decimalIndex - 1);
+      const start = performance.now();
+      // Small delay
+      for (let j = 0; j < 1000; j++) {
+        Math.random();
       }
+      const end = performance.now();
+      measurements.push(end - start);
     }
     
-    return precision;
+    // Calculate precision based on decimal places
+    const precisions = measurements.map(time => {
+      const timeStr = time.toString();
+      const decimalIndex = timeStr.indexOf('.');
+      return decimalIndex !== -1 ? timeStr.length - decimalIndex - 1 : 0;
+    });
+    
+    return Math.max(...precisions);
   };
 
-  // Privacy and security detection
+  // Enhanced privacy and security detection
   const getPrivacyInfo = (): PrivacyInfo => {
     return {
       adBlockDetected: detectAdBlock(),
       privateBrowsing: detectPrivateBrowsing(),
-      webrtcLeakDetected: false, // Would need WebRTC implementation
-      pluginsHidden: navigator.plugins.length === 0
+      webrtcLeakDetected: false, // Could be implemented with WebRTC
+      pluginsHidden: navigator.plugins.length === 0 || !navigator.plugins
     };
   };
 
-  // Detect ad blockers
+  // Enhanced ad blocker detection
   const detectAdBlock = (): boolean => {
-    const testAd = document.createElement('div');
-    testAd.innerHTML = '&nbsp;';
-    testAd.className = 'adsbox';
-    testAd.style.position = 'absolute';
-    testAd.style.left = '-9999px';
-    document.body.appendChild(testAd);
-    
-    const adBlocked = testAd.offsetHeight === 0;
-    document.body.removeChild(testAd);
-    
-    return adBlocked;
-  };
-
-  // Detect private browsing (simplified)
-  const detectPrivateBrowsing = (): boolean => {
     try {
-      // Test localStorage access
-      localStorage.setItem('__test__', 'test');
-      localStorage.removeItem('__test__');
+      // Create multiple test elements with different ad-like characteristics
+      const testElements = [
+        { className: 'adsbox', id: 'ads' },
+        { className: 'ad-banner', id: 'google-ads' },
+        { className: 'advertisement', id: 'doubleclick' },
+        { className: 'sponsor', id: 'sponsored-content' }
+      ];
+
+      for (const testConfig of testElements) {
+        const testAd = document.createElement('div');
+        testAd.innerHTML = '&nbsp;';
+        testAd.className = testConfig.className;
+        testAd.id = testConfig.id;
+        testAd.style.position = 'absolute';
+        testAd.style.left = '-9999px';
+        testAd.style.width = '1px';
+        testAd.style.height = '1px';
+        
+        document.body.appendChild(testAd);
+        
+        const isBlocked = testAd.offsetHeight === 0 || 
+                         testAd.offsetWidth === 0 || 
+                         !testAd.offsetParent;
+        
+        document.body.removeChild(testAd);
+        
+        if (isBlocked) {
+          return true;
+        }
+      }
+      
       return false;
     } catch {
-      return true;
+      return false;
     }
   };
 
-  // Calculate risk score based on anomalies
+  // Enhanced private browsing detection
+  const detectPrivateBrowsing = (): boolean => {
+    try {
+      // Multiple detection methods
+      
+      // Method 1: localStorage test
+      try {
+        localStorage.setItem('__test__', 'test');
+        localStorage.removeItem('__test__');
+      } catch {
+        return true;
+      }
+
+      // Method 2: IndexedDB test
+      if (!window.indexedDB) {
+        return true;
+      }
+
+      // Method 3: Safari-specific test
+      if ('safariIncognito' in window) {
+        return true;
+      }
+
+      // Method 4: Chrome FileSystem API test
+      if ('webkitRequestFileSystem' in window) {
+        try {
+          (window as any).webkitRequestFileSystem(
+            0, 1,
+            () => {},
+            () => { return true; }
+          );
+        } catch {
+          return true;
+        }
+      }
+
+      return false;
+    } catch {
+      return false;
+    }
+  };
+
+  // Enhanced risk score calculation with better bot detection
   const calculateRiskScore = (fingerprint: Omit<DeviceFingerprint, 'hash' | 'riskScore' | 'riskFactors'>): { score: number; factors: string[] } => {
     let score = 0;
     const factors: string[] = [];
 
-    // Check for automation indicators
-    if (fingerprint.basic.userAgent.includes('HeadlessChrome')) {
+    // Critical automation indicators
+    const userAgent = fingerprint.basic.userAgent.toLowerCase();
+    const criticalBotSignatures = [
+      'headlesschrome', 'phantomjs', 'selenium', 'webdriver', 
+      'puppeteer', 'playwright', 'chromedriver', 'geckodriver'
+    ];
+
+    for (const signature of criticalBotSignatures) {
+      if (userAgent.includes(signature)) {
+        score += 50;
+        factors.push(`${signature} detected in user agent`);
+      }
+    }
+
+    // WebDriver detection
+    if ((window as any).webdriver || (navigator as any).webdriver) {
       score += 40;
-      factors.push('Headless browser detected');
+      factors.push('WebDriver property detected');
     }
 
-    if (fingerprint.basic.userAgent.includes('PhantomJS')) {
+    // Phantom.js specific detection
+    if ((window as any).callPhantom || (window as any)._phantom) {
       score += 40;
-      factors.push('PhantomJS detected');
+      factors.push('PhantomJS environment detected');
     }
 
-    // Check for unusual hardware
-    if (fingerprint.basic.hardwareConcurrency > 16) {
-      score += 15;
-      factors.push('Unusual CPU core count');
+    // Graphics/WebGL suspicious patterns
+    const renderer = fingerprint.graphics.webglRenderer.toLowerCase();
+    const vendor = fingerprint.graphics.webglVendor.toLowerCase();
+    
+    if (renderer.includes('swiftshader') || renderer.includes('llvmpipe') || 
+        renderer.includes('mesa') || vendor.includes('brian paul')) {
+      score += 30;
+      factors.push('Software rendering detected');
     }
 
-    // Check for missing features
-    if (!fingerprint.graphics.webglVendor || fingerprint.graphics.webglVendor === 'unknown') {
+    // Hardware inconsistencies
+    if (fingerprint.basic.hardwareConcurrency === 1 && 
+        !userAgent.includes('mobile') && !userAgent.includes('android')) {
       score += 20;
-      factors.push('WebGL not available');
+      factors.push('Single core on non-mobile device');
     }
 
-    // Check for privacy tools
-    if (fingerprint.privacy.adBlockDetected) {
-      score += 5;
-      factors.push('Ad blocker detected');
+    if (fingerprint.basic.hardwareConcurrency > 32) {
+      score += 15;
+      factors.push('Unusually high CPU core count');
     }
 
-    if (fingerprint.privacy.privateBrowsing) {
-      score += 10;
-      factors.push('Private browsing mode');
-    }
-
-    // Check for unusual screen configurations
-    if (fingerprint.screen.screenWidth === 1024 && fingerprint.screen.screenHeight === 768) {
-      score += 10;
-      factors.push('Common automation screen size');
-    }
-
-    // Check for missing fonts (automation often has fewer fonts)
-    if (fingerprint.fonts.fontCount < 10) {
+    // Font limitations (strong bot indicator)
+    if (fingerprint.fonts.fontCount < 5) {
+      score += 30;
+      factors.push('Very limited font selection');
+    } else if (fingerprint.fonts.fontCount < 15) {
       score += 15;
       factors.push('Limited font selection');
     }
 
-    // Performance timing precision (automation often has different precision)
-    if (fingerprint.performance.performanceNowPrecision > 3) {
+    // Screen resolution patterns
+    const commonBotResolutions = [
+      [1024, 768], [1280, 1024], [800, 600], [1366, 768]
+    ];
+    
+    if (commonBotResolutions.some(([w, h]) => 
+        fingerprint.screen.screenWidth === w && fingerprint.screen.screenHeight === h)) {
       score += 10;
-      factors.push('High-precision timing');
+      factors.push('Common automation screen resolution');
+    }
+
+    // Canvas fingerprinting issues
+    if (fingerprint.graphics.canvasFingerprint === 'no-canvas' || 
+        fingerprint.graphics.canvasFingerprint.length < 100) {
+      score += 25;
+      factors.push('Canvas rendering issues');
+    }
+
+    // Audio context issues
+    if (fingerprint.audio.audioFingerprint === 'audio-unavailable' || 
+        fingerprint.audio.contextState === 'unavailable') {
+      score += 20;
+      factors.push('Audio context unavailable');
+    }
+
+    // Missing sensors (desktop/VM indicator)
+    if (!fingerprint.sensors.motionSupported && 
+        !fingerprint.sensors.orientationSupported && 
+        !fingerprint.sensors.vibrationSupported) {
+      score += 10;
+      factors.push('No device sensors available');
+    }
+
+    // Performance timing precision anomalies
+    if (fingerprint.performance.performanceNowPrecision === 0 || 
+        fingerprint.performance.performanceNowPrecision > 5) {
+      score += 10;
+      factors.push('Unusual performance timing precision');
+    }
+
+    // Plugin anomalies
+    if (fingerprint.privacy.pluginsHidden) {
+      score += 10;
+      factors.push('Browser plugins hidden');
+    }
+
+    // Geographic inconsistencies
+    const timezone = fingerprint.timezone.timezone;
+    const language = fingerprint.basic.language;
+    
+    // Simple geographic consistency check
+    if (timezone.includes('America') && !language.startsWith('en') && 
+        !language.startsWith('es') && !language.startsWith('fr')) {
+      score += 15;
+      factors.push('Geographic inconsistency detected');
     }
 
     return { score: Math.min(score, 100), factors };
@@ -568,8 +763,30 @@ export const DeviceFingerprintProvider: React.FC<{
 
   // Generate comprehensive fingerprint hash
   const generateFingerprintHash = (data: Omit<DeviceFingerprint, 'hash' | 'riskScore' | 'riskFactors'>): string => {
-    const hashableData = JSON.stringify(data, Object.keys(data).sort());
-    return btoa(hashableData).replace(/[+/=]/g, '').substring(0, 32);
+    // Create a more stable hash by excluding volatile data
+    const stableData = {
+      basic: {
+        ...data.basic,
+        userAgent: data.basic.userAgent.replace(/\d+\.\d+\.\d+/g, 'X.X.X') // Normalize version numbers
+      },
+      screen: data.screen,
+      graphics: data.graphics,
+      fonts: data.fonts,
+      timezone: data.timezone,
+      // Exclude audio, network, performance, privacy as they can be volatile
+    };
+    
+    const hashableData = JSON.stringify(stableData, Object.keys(stableData).sort());
+    
+    // Simple hash function (you might want to use a proper crypto hash in production)
+    let hash = 0;
+    for (let i = 0; i < hashableData.length; i++) {
+      const char = hashableData.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    
+    return Math.abs(hash).toString(36).padStart(8, '0');
   };
 
   // Main fingerprint generation function
