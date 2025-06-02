@@ -146,20 +146,20 @@ export const MouseTrackerProvider: React.FC<{ children: React.ReactNode }> = ({ 
       let severity: TeleportationEvent['severity'] | null = null;
       
       // Critical: Large distance in impossibly short time
-      if (distance > CONFIG.teleportation.criticalDistance && timeDelta < CONFIG.teleportation.maxNormalTime) {
+      if (distance > CONFIG.teleportation.criticalDistance ) {
         severity = 'critical';
         criticalMovements++;
       }
       // High: Large distance in very short time
-      else if (distance > CONFIG.teleportation.highSuspiciousDistance && timeDelta < CONFIG.teleportation.maxNormalTime) {
+      else if (distance > CONFIG.teleportation.highSuspiciousDistance ) {
         severity = 'high';
       }
       // Medium: Moderate distance in very short time
-      else if (distance > CONFIG.teleportation.minSuspiciousDistance && timeDelta < CONFIG.teleportation.instantaneousTime) {
+      else if (distance > CONFIG.teleportation.minSuspiciousDistance ) {
         severity = 'medium';
       }
       // Low: Moderate distance in short time
-      else if (distance > CONFIG.teleportation.minSuspiciousDistance && timeDelta < CONFIG.teleportation.maxNormalTime) {
+      else if (distance > CONFIG.teleportation.minSuspiciousDistance ) {
         severity = 'low';
       }
       
